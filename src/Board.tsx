@@ -1,4 +1,4 @@
-import { CaptureUpdateAction, Excalidraw, reconcileElements } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { BoardSession } from "./session";
@@ -7,6 +7,15 @@ type Status = "connecting" | "online" | "offline";
 interface Peer { id: string; name: string; color: string; role: string }
 
 const light = (hex: string) => hex + "33";
+
+// colori delle note adesive
+const NOTE_COLORS = [
+  { name: "Giallo", bg: "#ffec99" },
+  { name: "Rosa", bg: "#ffc9c9" },
+  { name: "Verde", bg: "#b2f2bb" },
+  { name: "Azzurro", bg: "#a5d8ff" },
+  { name: "Arancio", bg: "#ffd8a8" },
+];
 
 export function Board({ session }: { session: BoardSession }) {
   const apiRef = useRef<any>(null);
@@ -19,6 +28,9 @@ export function Board({ session }: { session: BoardSession }) {
   const flushTimer = useRef<number | null>(null);
   const firstInit = useRef(true);
   const readonly = session.role === "viewer";
+  const participant = session.role === "participant"; // modifica solo i propri oggetti (lo impone il server; qui si evita solo di selezionare quelli altrui)
+  const myKey = useRef("");
+  const foreign = (e: any) => !!e.customData?.owner && e.customData.owner !== myKey.current;
 
   const setApiBoth = useCallback((a: any) => {
     apiRef.current = a;
@@ -68,9 +80,91 @@ export function Board({ session }: { session: BoardSession }) {
     const a = apiRef.current;
     if (!a) return;
     for (const e of els) sentVersion.current.set(e.id, `${e.version}:${e.versionNonce}`);
-    const merged = reconcileElements(a.getSceneElementsIncludingDeleted(), els, a.getAppState());
+    els = restoreElements(els as any, null) as any[]; // ripara campi mancanti: un elemento difettoso non deve bloccare la lavagna
+    const merged = reconcileElements(a.getSceneElementsIncludingDeleted(), els as any, a.getAppState());
     a.updateScene({ elements: merged, captureUpdate: CaptureUpdateAction.NEVER });
   }, []);
+
+  /** Centro della parte di lavagna visibile, in coordinate della scena. */
+  const viewCenter = () => {
+    const s = apiRef.current.getAppState();
+    return { x: s.width / 2 / s.zoom.value - s.scrollX, y: s.height / 2 / s.zoom.value - s.scrollY };
+  };
+
+  /** Aggiunge elementi alla scena (e li seleziona); la sincronizzazione parte dall'onChange di Excalidraw. */
+  const insert = (skeleton: any[], selectIndex = 0) => {
+    const a = apiRef.current;
+    const created = convertToExcalidrawElements(skeleton as any);
+    // piccolo scarto a cascata, così più note inserite di fila non si sovrappongono esattamente
+    const n = a.getSceneElements().length % 6;
+    for (const e of created as any[]) {
+      e.x += n * 14;
+      e.y += n * 14;
+    }
+    a.updateScene({
+      elements: [...a.getSceneElementsIncludingDeleted(), ...created],
+      appState: { selectedElementIds: { [(created as any[])[selectIndex].id]: true } },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+  };
+
+  const addNote = (bg: string) => {
+    const { x, y } = viewCenter();
+    insert([
+      {
+        type: "rectangle",
+        x: x - 100,
+        y: y - 100,
+        width: 200,
+        height: 200,
+        backgroundColor: bg,
+        fillStyle: "solid",
+        strokeColor: "transparent",
+        roughness: 0,
+        roundness: { type: 3 },
+        customData: { kind: "nota", author: session.name },
+        label: { text: "Scrivi qui…", fontSize: 20, strokeColor: "#1e1e1e", textAlign: "center", verticalAlign: "middle" },
+      },
+    ]);
+  };
+
+  const addFrame = () => {
+    const { x, y } = viewCenter();
+    const count = apiRef.current.getSceneElements().filter((e: any) => e.type === "frame").length + 1;
+    insert([{ type: "frame", children: [], name: `Frame ${count}`, x: x - 480, y: y - 270, width: 960, height: 540 }]);
+  };
+
+  /** Aggiunge foto dal dispositivo (o dalla fotocamera, su telefono): ridotte a 1600 px per stare nel limite del server. */
+  const addPhotos = async (list: FileList | null) => {
+    const a = apiRef.current;
+    if (!list || !a) return;
+    for (const file of Array.from(list).slice(0, 6)) {
+      try {
+        const bmp = await createImageBitmap(file);
+        const k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+        const w = Math.round(bmp.width * k);
+        const h = Math.round(bmp.height * k);
+        const cv = document.createElement("canvas");
+        cv.width = w;
+        cv.height = h;
+        cv.getContext("2d")!.drawImage(bmp, 0, 0, w, h);
+        let mimeType = file.type === "image/png" ? "image/png" : "image/jpeg"; // PNG resta tale (trasparenze, schermate); il resto diventa JPEG
+        let dataURL = cv.toDataURL(mimeType, 0.85);
+        if (dataURL.length > 9_000_000 && mimeType === "image/png") {
+          mimeType = "image/jpeg";
+          dataURL = cv.toDataURL(mimeType, 0.85);
+        }
+        const id = crypto.randomUUID().replace(/-/g, "");
+        a.addFiles([{ id, mimeType, dataURL, created: Date.now() }]);
+        const show = Math.min(1, 480 / Math.max(w, h)); // sulla lavagna parte a ~480 px: si ridimensiona a mano
+        const { x, y } = viewCenter();
+        insert([{ type: "image", fileId: id, status: "saved", x: x - (w * show) / 2, y: y - (h * show) / 2, width: w * show, height: h * show, customData: { kind: "foto", author: session.name } }]);
+      } catch (e) {
+        console.error("Foto non inserita:", e);
+        window.alert(`Non riesco ad aggiungere "${file.name}": formato non supportato o file danneggiato.`);
+      }
+    }
+  };
 
   // connessione, con riconnessione automatica
   useEffect(() => {
@@ -90,6 +184,7 @@ export function Board({ session }: { session: BoardSession }) {
       ws.onmessage = (ev) => {
         const m = JSON.parse(ev.data);
         if (m.t === "init") {
+          myKey.current = m.me.key;
           peers.current.clear();
           for (const p of m.peers as Peer[]) peers.current.set(p.id, p);
           applyRemote(m.els);
@@ -100,6 +195,13 @@ export function Board({ session }: { session: BoardSession }) {
           pushCollaborators();
           if (!readonly) flush(); // dopo una riconnessione rimanda ciò che si è disegnato offline
         } else if (m.t === "els") applyRemote(m.els);
+        else if (m.t === "deny") {
+          // il server ha respinto una modifica a oggetti altrui: si ripristina la loro versione
+          const back = new Map<string, any>((restoreElements(m.els, null) as any[]).map((e: any) => [e.id, e]));
+          for (const e of m.els) sentVersion.current.set(e.id, `${e.version}:${e.versionNonce}`);
+          const a = apiRef.current;
+          a.updateScene({ elements: a.getSceneElementsIncludingDeleted().map((e: any) => back.get(e.id) ?? e), captureUpdate: CaptureUpdateAction.NEVER });
+        }
         else if (m.t === "files") {
           for (const f of m.files) sentFiles.current.add(f.id);
           apiRef.current.addFiles(m.files);
@@ -147,18 +249,28 @@ export function Board({ session }: { session: BoardSession }) {
           <span className={`chip ${status === "online" ? "chip-ok" : status === "offline" ? "chip-bad" : "chip-wait"}`}>
             {status === "online" ? "in linea" : status === "offline" ? "offline" : "connessione…"}
           </span>
-          <span className="chip">{readonly ? "sola lettura" : "può modificare"}</span>
+          <span className="chip">{readonly ? "sola lettura" : participant ? "modifica i propri oggetti" : "può modificare tutto"}</span>
           <span className="board-user">{session.name}</span>
         </div>
       </div>
       <div className="board-canvas">
         <Excalidraw
-          excalidrawAPI={setApiBoth}
+          excalidrawAPI={(a: any) => { setApiBoth(a); if (import.meta.env.DEV) (window as any).__api = a; }}
           langCode="it-IT"
           viewModeEnabled={readonly}
           isCollaborating
           UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false } }}
-          onChange={() => {
+          onChange={(els: readonly any[], appState: any) => {
+            if (participant) {
+              // un partecipante non seleziona oggetti altrui (non può spostarli né cancellarli)
+              const sel = appState.selectedElementIds as Record<string, boolean>;
+              const mine = els.filter((e) => sel[e.id] && foreign(e));
+              if (mine.length) {
+                const next = { ...sel };
+                for (const e of mine) delete next[e.id];
+                apiRef.current?.updateScene({ appState: { selectedElementIds: next } });
+              }
+            }
             if (!readonly && flushTimer.current === null) flushTimer.current = window.setTimeout(flush, 60);
           }}
           onPointerUpdate={(p: any) => {
@@ -168,6 +280,31 @@ export function Board({ session }: { session: BoardSession }) {
             send({ t: "ptr", x: p.pointer.x, y: p.pointer.y, tool: p.pointer.tool, button: p.button, sel: Object.keys(apiRef.current?.getAppState().selectedElementIds || {}) });
           }}
         />
+        {!readonly && api && (
+          <div className="board-palette" role="toolbar" aria-label="Note e frame">
+            <span className="pal-label">Nota</span>
+            {NOTE_COLORS.map((c) => (
+              <button key={c.bg} className="pal-note" style={{ background: c.bg }} title={`Nota adesiva ${c.name.toLowerCase()}`} aria-label={`Nota adesiva ${c.name.toLowerCase()}`} onClick={() => addNote(c.bg)} />
+            ))}
+            <span className="pal-sep" />
+            <button className="pal-frame" title="Aggiungi un frame (area per raggruppare o presentare)" onClick={addFrame}>
+              <span aria-hidden>▭</span> Frame
+            </button>
+            <label className="pal-frame pal-photo" title="Aggiungi una foto dal dispositivo o dalla fotocamera">
+              <span aria-hidden>🖼</span> Foto
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                multiple
+                hidden
+                onChange={(e) => {
+                  void addPhotos(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+        )}
       </div>
     </div>
   );

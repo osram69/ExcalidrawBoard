@@ -5,7 +5,7 @@ export interface BoardSession {
   token: string;
   name: string;
   uid?: string;
-  role: "editor" | "viewer";
+  role: "editor" | "participant" | "viewer";
   exp: number;
 }
 
@@ -16,7 +16,7 @@ export function roomFromPath(): string | null {
   return m ? m[1] : null;
 }
 
-function decode(token: string): { room: string; name: string; uid?: string; role: "editor" | "viewer"; exp: number } | null {
+function decode(token: string): { room: string; name: string; uid?: string; role: "editor" | "participant" | "viewer"; exp: number } | null {
   try {
     const body = token.split(".")[0].replace(/-/g, "+").replace(/_/g, "/");
     const json = decodeURIComponent(escape(atob(body))); // UTF-8 (nomi con accenti)
@@ -45,7 +45,7 @@ export function loadSession(room: string): BoardSession | null {
   if (!token) return null;
   const p = decode(token);
   if (!p || p.room !== room || !(p.exp > Date.now())) return null;
-  return { room, token, name: p.name || "Ospite", uid: typeof p.uid === "string" ? p.uid : undefined, role: p.role === "viewer" ? "viewer" : "editor", exp: p.exp };
+  return { room, token, name: p.name || "Ospite", uid: typeof p.uid === "string" ? p.uid : undefined, role: p.role === "viewer" ? "viewer" : p.role === "participant" ? "participant" : "editor", exp: p.exp };
 }
 
 /** Identificativo stabile di questo browser, per attribuire ciò che si disegna. */

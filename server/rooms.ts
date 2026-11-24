@@ -23,6 +23,7 @@ export interface Peer {
   name: string;
   role: Role;
   color: string;
+  key: string; // identità per la proprietà degli oggetti: id utente del token, altrimenti il nome
 }
 
 const ID = /^[\w-]{1,100}$/;
@@ -31,6 +32,14 @@ export const MAX_FILE = 10 * 1024 * 1024; // una singola immagine (dataURL)
 const IMG = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/; // niente SVG: nessun contenuto attivo
 
 export const roomDir = (dataDir: string, room: string) => path.join(dataDir, "rooms", room);
+
+// tipi ammessi (niente embeddable/iframe: contenuti esterni) e campi indispensabili: un elemento malformato manderebbe in errore la lavagna a tutti
+const TYPES = new Set(["rectangle", "diamond", "ellipse", "arrow", "line", "freedraw", "text", "image", "frame"]);
+const wellFormed = (e: El) =>
+  TYPES.has(e.type as string) &&
+  ["x", "y", "width", "height", "angle", "opacity", "strokeWidth"].every((k) => e[k] === undefined || Number.isFinite(e[k])) &&
+  ["x", "y", "width", "height"].every((k) => Number.isFinite(e[k])) &&
+  ["strokeColor", "backgroundColor"].every((k) => typeof e[k] === "string" && (e[k] as string).length <= 60);
 
 /** Un elemento remoto vince se ha versione più alta (a parità, come fa Excalidraw, il nonce più basso). */
 const wins = (a: El, b: El | undefined) => !b || a.version > b.version || (a.version === b.version && a.versionNonce < b.versionNonce);
@@ -46,7 +55,7 @@ export class Room {
   constructor(readonly id: string, private dir: string, private onEmpty: () => void) {
     try {
       const j = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
-      for (const e of j.elements || []) if (e && typeof e.id === "string") this.els.set(e.id, e);
+      for (const e of j.elements || []) if (e && typeof e.id === "string" && wellFormed(e)) this.els.set(e.id, e);
     } catch {
       /* board nuova */
     }
@@ -60,19 +69,33 @@ export class Room {
     }
   }
 
-  /** Applica gli elementi ricevuti; restituisce quelli effettivamente nuovi (da ritrasmettere agli altri). */
-  applyElements(list: unknown): El[] {
+  /**
+   * Applica gli elementi ricevuti da `peer`. Proprietà degli oggetti (come Miro): il server marca ogni elemento nuovo con il
+   * proprietario (`customData.owner`, mai preso dal client). Un "participant" non può cambiare né cancellare oggetti altrui
+   * (né quelli senza proprietario, cioè preesistenti); l'"editor" (trainer) può tutto e il proprietario resta quello originale.
+   * Restituisce { accepted: da ritrasmettere agli altri, denied: copie del server degli elementi respinti }.
+   */
+  applyElements(list: unknown, peer: Pick<Peer, "key" | "role">): { accepted: El[]; denied: El[] } {
     const accepted: El[] = [];
-    if (!Array.isArray(list)) return accepted;
+    const denied: El[] = [];
+    if (!Array.isArray(list)) return { accepted, denied };
     for (const e of list.slice(0, 5000) as El[]) {
       if (!e || typeof e.id !== "string" || !ID.test(e.id) || !Number.isFinite(e.version) || !Number.isFinite(e.versionNonce)) continue;
-      if (JSON.stringify(e).length > MAX_EL_JSON) continue;
-      if (!wins(e, this.els.get(e.id))) continue;
+      if (!wellFormed(e) || JSON.stringify(e).length > MAX_EL_JSON) continue;
+      const old = this.els.get(e.id);
+      const oldOwner = (old?.customData as { owner?: string } | undefined)?.owner;
+      if (old && peer.role === "participant" && oldOwner !== peer.key) {
+        denied.push(old);
+        continue;
+      }
+      if (!wins(e, old)) continue;
+      const cd = e.customData && typeof e.customData === "object" ? (e.customData as Record<string, unknown>) : {};
+      e.customData = { ...cd, owner: oldOwner ?? peer.key };
       this.els.set(e.id, e);
       accepted.push(e);
     }
     if (accepted.length) this.scheduleSave();
-    return accepted;
+    return { accepted, denied };
   }
 
   applyFiles(list: unknown): BinFile[] {

@@ -93,8 +93,9 @@ server.on("upgrade", (req, socket, head) => {
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
     const r = getRoom(DATA_DIR, room);
-    const peer: Peer = { id: crypto.randomUUID(), ws, name: t.name, role: t.role, color: colorFor(t.uid || t.name) };
-    const info = (p: Peer) => ({ id: p.id, name: p.name, color: p.color, role: p.role });
+    const key = t.uid || `n:${t.name}`;
+    const peer: Peer = { id: crypto.randomUUID(), ws, name: t.name, role: t.role, color: colorFor(key), key };
+    const info = (p: Peer) => ({ id: p.id, name: p.name, color: p.color, role: p.role, key: p.key });
     ws.send(JSON.stringify({ t: "init", me: info(peer), els: [...r.els.values()], peers: [...r.peers].map(info) }));
     for (const f of r.files.values()) ws.send(JSON.stringify({ t: "files", files: [f] }));
     r.join(peer);
@@ -114,10 +115,12 @@ server.on("upgrade", (req, socket, head) => {
         r.broadcast({ t: "ptr", id: peer.id, x: n(msg.x), y: n(msg.y), tool: msg.tool === "laser" ? "laser" : "pointer", button: msg.button === "down" ? "down" : "up", sel: Array.isArray(msg.sel) ? msg.sel.filter((s: unknown) => typeof s === "string").slice(0, 50) : [] }, peer);
         return;
       }
-      if (peer.role !== "editor") return; // sola lettura: i viewer non scrivono, qualunque cosa mandino
+      if (peer.role === "viewer") return; // sola lettura: i viewer non scrivono, qualunque cosa mandino
       if (msg?.t === "els") {
-        const ok = r.applyElements(msg.els);
-        if (ok.length) r.broadcast({ t: "els", els: ok }, peer);
+        const { accepted, denied } = r.applyElements(msg.els, peer);
+        if (accepted.length) r.broadcast({ t: "els", els: accepted }, peer);
+        // oggetti altrui: il client li riporta allo stato del server
+        if (denied.length) ws.send(JSON.stringify({ t: "deny", els: denied }));
       } else if (msg?.t === "files") {
         const ok = r.applyFiles(msg.files);
         if (ok.length) r.broadcast({ t: "files", files: ok }, peer);

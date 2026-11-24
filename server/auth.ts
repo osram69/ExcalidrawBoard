@@ -3,7 +3,7 @@
 // a ogni connessione WebSocket e a ogni upload: nessun account da gestire qui.
 import crypto from "node:crypto";
 
-export type Role = "editor" | "viewer";
+export type Role = "editor" | "viewer" | "participant"; // editor = tutto (trainer); participant = crea e modifica solo i propri oggetti; viewer = sola lettura
 export interface TokenPayload {
   room: string; // identificativo della board
   name: string; // nome mostrato accanto al cursore
@@ -29,7 +29,7 @@ export function verifyToken(token: string | null | undefined, secret: string): T
   if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString()) as TokenPayload;
-    if (!ROOM_ID.test(p.room) || (p.role !== "editor" && p.role !== "viewer") || !(p.exp > Date.now())) return null;
+    if (!ROOM_ID.test(p.room) || !["editor", "viewer", "participant"].includes(p.role) || !(p.exp > Date.now())) return null;
     const uid = typeof p.uid === "string" && /^[\w.@-]{1,64}$/.test(p.uid) ? p.uid : undefined;
     return { room: p.room, name: String(p.name || "Ospite").slice(0, 60), uid, role: p.role, exp: p.exp };
   } catch {
