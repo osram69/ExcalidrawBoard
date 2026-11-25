@@ -1,0 +1,163 @@
+// Test di integrazione di `npm run seed`: avvia il vero server su una porta libera con una cartella dati temporanea.
+import assert from "node:assert/strict";
+import { spawn, type ChildProcess } from "node:child_process";
+import fs from "node:fs";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { after, before, test } from "node:test";
+import { signToken, type Role } from "../server/auth.ts";
+import { connectBoard, main } from "./seed.ts";
+
+const SECRET = "test-secret";
+let server: ChildProcess;
+let url: string;
+let dataDir: string;
+let work: string;
+
+const freePort = () =>
+  new Promise<number>((resolve) => {
+    const s = net.createServer().listen(0, () => {
+      const p = (s.address() as net.AddressInfo).port;
+      s.close(() => resolve(p));
+    });
+  });
+
+before(async () => {
+  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "seed-data-"));
+  work = fs.mkdtempSync(path.join(os.tmpdir(), "seed-work-"));
+  const port = await freePort();
+  url = `http://localhost:${port}`;
+  server = spawn(process.execPath, ["--import", "tsx", "server/index.ts"], {
+    env: { ...process.env, PORT: String(port), DATA_DIR: dataDir, BOARD_SECRET: SECRET, NODE_ENV: "" },
+    stdio: "ignore",
+  });
+  for (let i = 0; i < 100; i++) {
+    try {
+      if ((await fetch(`${url}/health`)).ok) return;
+    } catch {
+      /* non ancora pronto */
+    }
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  throw new Error("il server di prova non è partito");
+});
+
+after(() => {
+  server?.kill();
+});
+
+const env = { BOARD_SECRET: SECRET } as NodeJS.ProcessEnv;
+const token = (room: string, role: Role, uid = "u") => signToken({ room, name: uid, uid, role, exp: Date.now() + 3600e3 }, SECRET);
+
+function pngFile(name: string, w = 300, h = 200, extra = 0) {
+  const b = Buffer.alloc(33 + extra);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(b);
+  b.writeUInt32BE(13, 8);
+  b.write("IHDR", 12);
+  b.writeUInt32BE(w, 16);
+  b.writeUInt32BE(h, 20);
+  const p = path.join(work, name);
+  fs.writeFileSync(p, b);
+  return p;
+}
+
+async function run(args: string[]) {
+  const out: string[] = [];
+  const code = await main([...args, "--server", url], env, (l) => out.push(l));
+  return { code, text: out.join("\n") };
+}
+
+const roomDirs = () => (fs.existsSync(path.join(dataDir, "rooms")) ? fs.readdirSync(path.join(dataDir, "rooms")) : []);
+
+test("immagine su 3 gruppi con 5 allievi: board create, link giusti, immagine bloccata", async () => {
+  const allievi = path.join(work, "allievi.txt");
+  fs.writeFileSync(allievi, "Anna\nMarco\nGiulia\nLuca\nSara\n");
+  const { code, text } = await run(["corso1", "3", pngFile("uml.png"), "--allievi", allievi]);
+  assert.equal(code, 0, text);
+  for (const g of [1, 2, 3]) assert.ok(text.includes(`corso1-g${g}`), `manca il gruppo ${g}`);
+  assert.equal((text.match(/Trainer: http/g) ?? []).length, 3);
+  for (const n of ["Anna", "Marco", "Giulia", "Luca", "Sara"]) assert.match(text, new RegExp(`${n}: http`));
+  const v = await connectBoard(url, "corso1-g1", token("corso1-g1", "viewer"));
+  assert.equal(v.els.length, 1);
+  assert.equal(v.els[0].type, "image");
+  assert.equal(v.els[0].locked, true);
+  assert.equal(v.files.length, 1);
+  assert.equal(v.files[0].id, v.els[0].fileId);
+  await v.close();
+});
+
+test("secondo lancio con lo stesso corso: board saltate, contenuto invariato", async () => {
+  const { code, text } = await run(["corso1", "3", pngFile("uml2.png")]);
+  assert.equal(code, 0, text);
+  assert.equal((text.match(/saltata/g) ?? []).length, 3);
+  const v = await connectBoard(url, "corso1-g2", token("corso1-g2", "viewer"));
+  assert.equal(v.els.length, 1, "l'immagine non deve raddoppiare");
+  await v.close();
+});
+
+test("un allievo (participant) non può spostare il materiale", async () => {
+  const room = "corso1-g1";
+  const before = (await connectBoard(url, room, token(room, "viewer"))).els[0];
+  const p = await connectBoard(url, room, token(room, "participant", "anna"));
+  p.send({ t: "els", els: [{ ...before, x: before.x + 500, version: before.version + 1, versionNonce: 1 }] });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.ok(p.received.some((m) => m.t === "deny"), "il server doveva respingere la modifica");
+  await p.close();
+  const after = (await connectBoard(url, room, token(room, "viewer"))).els[0];
+  assert.equal(after.x, before.x);
+});
+
+test("errori di validazione: nessuna board creata", async () => {
+  const dirsBefore = roomDirs().length;
+  const testo = path.join(work, "nota.txt");
+  fs.writeFileSync(testo, "non sono un'immagine");
+  const grande = pngFile("grande.png", 300, 200, 11 * 1024 * 1024);
+  const badStudents = path.join(work, "cattivi.txt");
+  fs.writeFileSync(badStudents, "Anna;9\n");
+  const casi: string[][] = [
+    ["corso2", "2", path.join(work, "non-esiste.png")],
+    ["corso2", "2", testo],
+    ["corso2", "2", grande],
+    ["corso2", "2", pngFile("ok.png"), "--allievi", badStudents],
+    ["corso2", "2", pngFile("ok2.png"), "--allievi", path.join(work, "manca.txt")],
+    ["corso2", "0", pngFile("ok3.png")],
+  ];
+  for (const argv of casi) {
+    const { code, text } = await run(argv);
+    assert.equal(code, 1, `${argv.join(" ")} -> ${text}`);
+    assert.ok(text.length > 0);
+    assert.ok(!text.includes("at "), "niente stack trace");
+  }
+  assert.equal(roomDirs().length, dirsBefore, "non doveva nascere nessuna board");
+});
+
+test("server spento: errore chiaro che nomina il server", async () => {
+  const out: string[] = [];
+  const dead = `http://localhost:${await freePort()}`;
+  const code = await main(["corso3", "2", pngFile("ok4.png"), "--server", dead], env, (l) => out.push(l));
+  assert.equal(code, 1);
+  assert.ok(out.join("\n").includes(dead), out.join("\n"));
+});
+
+test("senza elenco allievi: un link di gruppo con l'avviso", async () => {
+  const { code, text } = await run(["corso4", "2", pngFile("ok5.png")]);
+  assert.equal(code, 0, text);
+  assert.equal((text.match(/Allievi \(link di gruppo/g) ?? []).length, 2);
+});
+
+test("board già con contenuto (anche una sola nota) viene saltata", async () => {
+  const room = "corso5-g2";
+  const c = await connectBoard(url, room, token(room, "editor", "trainer"));
+  c.send({ t: "els", els: [{ id: "n1", type: "rectangle", x: 0, y: 0, width: 50, height: 50, version: 1, versionNonce: 1, strokeColor: "#000", backgroundColor: "#fff" }] });
+  await c.close();
+  const { code, text } = await run(["corso5", "2", pngFile("ok6.png")]);
+  assert.equal(code, 0, text);
+  assert.equal((text.match(/saltata/g) ?? []).length, 1);
+  const g1 = await connectBoard(url, "corso5-g1", token("corso5-g1", "viewer"));
+  const g2 = await connectBoard(url, room, token(room, "viewer"));
+  assert.equal(g1.els.length, 1);
+  assert.deepEqual(g2.els.map((e: any) => e.id), ["n1"]);
+  await g1.close();
+  await g2.close();
+});
