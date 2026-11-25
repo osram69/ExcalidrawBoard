@@ -8,6 +8,7 @@ export interface TokenPayload {
   room: string; // identificativo della board
   name: string; // nome mostrato accanto al cursore
   uid?: string; // identificativo stabile dell'utente (es. il nome utente sul sito): serve ad attribuire ciò che disegna
+  email?: string; // dichiarata al login con password di sessione (non verificata): identifica, non autentica
   role: Role;
   exp: number; // scadenza, ms epoch
 }
@@ -33,7 +34,8 @@ function readSigned(token: string | null | undefined, secret: string): TokenPayl
     if (!p || typeof p !== "object" || typeof p.room !== "string" || !ROOM_ID.test(p.room) || !["editor", "viewer", "participant"].includes(p.role)) return null;
     if (typeof p.exp !== "number" || !Number.isFinite(p.exp)) return null;
     const uid = typeof p.uid === "string" && /^[\w.@-]{1,64}$/.test(p.uid) ? p.uid : undefined;
-    return { room: p.room, name: String(p.name || "Ospite").slice(0, 60), uid, role: p.role, exp: p.exp };
+    const email = normalizeEmail(p.email);
+    return { room: p.room, name: String(p.name || "Ospite").slice(0, 60), uid, ...(email ? { email } : {}), role: p.role, exp: p.exp };
   } catch {
     return null;
   }
@@ -55,14 +57,14 @@ export function inspectToken(token: string | null | undefined, room: string, sec
   return { ok: true, payload: p };
 }
 
-/** Indirizzo del login del backend (`LOGIN_URL`): solo http(s) completo; altrimenti `null` (nessun reindirizzamento). */
-export function parseLoginUrl(raw: string | undefined): string | null {
-  const v = (raw ?? "").trim();
-  if (!v) return null;
-  try {
-    const u = new URL(v);
-    return u.protocol === "http:" || u.protocol === "https:" ? v : null;
-  } catch {
-    return null;
-  }
+/** Email normalizzata (minuscola, senza spazi) se plausibile e non più lunga di 120 caratteri; altrimenti `null`. */
+export function normalizeEmail(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const e = raw.trim().toLowerCase();
+  return e.length <= 120 && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@.]{2,}$/.test(e) ? e : null;
+}
+
+/** Identificativo stabile di una persona a partire dalla mail, senza mostrare la mail agli altri (finisce in cursori e proprietà degli oggetti). */
+export function personalUid(email: string): string {
+  return `u-${crypto.createHash("sha256").update(email).digest("hex").slice(0, 20)}`;
 }

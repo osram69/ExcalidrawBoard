@@ -7,6 +7,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { WebSocketServer } from "ws";
+import { createAuthHandler } from "./auth-http.ts";
 import { ROOM_ID, verifyToken } from "./auth.ts";
 import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
@@ -61,9 +62,23 @@ function serveFile(res: http.ServerResponse, file: string, cache: string) {
   });
 }
 
+const handleAuth = createAuthHandler({
+  secret: SECRET,
+  dataDir: DATA_DIR,
+  hours: Number(process.env.LOGIN_TOKEN_HOURS) || 12,
+  days: Number(process.env.LOGIN_REMEMBER_DAYS) || 7,
+});
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url || "/", "http://x");
   try {
+    if (url.pathname.startsWith("/auth/")) {
+      handleAuth(req, res, url).catch((e) => {
+        console.error(e);
+        if (!res.headersSent) send(res, 500, "Errore interno");
+      });
+      return;
+    }
     if (url.pathname === "/health") return send(res, 200, JSON.stringify({ ok: true, rooms: openRooms() }), "application/json");
     if (req.method !== "GET" && req.method !== "HEAD") return send(res, 405, "Metodo non consentito");
     const asset = url.pathname === "/" ? null : safeJoin(PUBLIC_DIR, "." + decodeURIComponent(url.pathname));
@@ -102,6 +117,10 @@ server.on("upgrade", (req, socket, head) => {
     r.join(peer);
     r.broadcast({ t: "join", peer: info(peer) }, peer);
     if (process.env.DEBUG_BOARD) console.log(`connesso ${t.name} (${t.role}) a ${room}`);
+
+    // alla scadenza del token il collegamento si chiude (codice 4001): il client torna al login
+    const expTimer = setTimeout(() => ws.close(4001, "scaduto"), Math.max(0, Math.min(t.exp - Date.now(), 2 ** 31 - 1)));
+    ws.on("close", () => clearTimeout(expTimer));
 
     ws.on("message", (data) => {
       let msg: any;

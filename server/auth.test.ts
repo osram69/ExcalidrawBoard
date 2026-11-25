@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inspectToken, parseLoginUrl, signToken, verifyToken, type TokenPayload } from "./auth.ts";
+import { inspectToken, normalizeEmail, personalUid, signToken, verifyToken, type TokenPayload } from "./auth.ts";
 
 const SECRET = "chiave-di-prova";
 const NOW = 1_800_000_000_000;
@@ -47,13 +47,24 @@ test("verifyToken: valido finché non scade (ora reale)", () => {
   assert.equal(verifyToken(future, "altro"), null);
 });
 
-test("parseLoginUrl: solo indirizzi http(s) completi", () => {
-  assert.equal(parseLoginUrl(undefined), null);
-  assert.equal(parseLoginUrl(""), null);
-  assert.equal(parseLoginUrl("   "), null);
-  assert.equal(parseLoginUrl("cubeacademy.eu/materiali/board"), null);
-  assert.equal(parseLoginUrl("ftp://x.org"), null);
-  assert.equal(parseLoginUrl("javascript:alert(1)"), null);
-  assert.equal(parseLoginUrl("  https://cubeacademy.eu/materiali/board  "), "https://cubeacademy.eu/materiali/board");
-  assert.equal(parseLoginUrl("http://localhost:4000/login?x=1"), "http://localhost:4000/login?x=1");
+test("normalizeEmail: minuscola, senza spazi, solo indirizzi plausibili", () => {
+  assert.equal(normalizeEmail("  Anna.Rossi@Esempio.IT "), "anna.rossi@esempio.it");
+  for (const bad of ["", "anna", "anna@", "@esempio.it", "anna@esempio", "a b@esempio.it", "anna@@esempio.it", 42, null, undefined, "a".repeat(120) + "@esempio.it"]) {
+    assert.equal(normalizeEmail(bad), null, String(bad));
+  }
+});
+
+test("personalUid: stabile, valido per il server e senza mostrare la mail", () => {
+  const a = personalUid("anna.rossi@esempio.it");
+  assert.equal(a, personalUid("anna.rossi@esempio.it"));
+  assert.notEqual(a, personalUid("marco.bianchi@esempio.it"));
+  assert.match(a, /^u-[0-9a-f]{20}$/);
+  assert.ok(!a.includes("anna"));
+});
+
+test("l'email firmata nel token viene letta; un'email non valida viene scartata", () => {
+  const withMail = inspectToken(signToken({ ...payload(), email: "anna@esempio.it" }, SECRET), "isaqb-dic26-g1", SECRET, NOW);
+  assert.equal(withMail.ok && withMail.payload.email, "anna@esempio.it");
+  const bad = inspectToken(signToken({ ...payload(), email: "non-una-mail" }, SECRET), "isaqb-dic26-g1", SECRET, NOW);
+  assert.equal(bad.ok && "email" in bad.payload, false);
 });
