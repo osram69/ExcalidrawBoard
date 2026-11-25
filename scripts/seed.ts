@@ -196,15 +196,15 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
   const link = (room: string, name: string, uid: string, role: Role) => `${args.base}/b/${room}?t=${signToken({ room, name, uid, role, exp }, secret)}`;
 
   /** Imposta password di sessione e data di fine della board (il server conserva solo l'impronta della password). */
-  async function applyAccess(room: string): Promise<void> {
+  async function applyAccess(room: string): Promise<number | null> {
     const editor = signToken({ room, name: args.trainer, uid: "trainer", role: "editor", exp }, secret);
     const r = await fetch(`${args.server}/auth/access?room=${encodeURIComponent(room)}`, {
       method: "PUT",
       headers: { Authorization: `Bearer ${editor}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ password: args.password, until: args.fino ?? null }),
+      body: JSON.stringify({ password: args.password, ...(args.fino !== undefined ? { until: args.fino } : {}) }), // senza --fino-al il server conserva la data che c'è
     }).catch(() => null);
     if (!r) throw new Error(`Non riesco a collegarmi al server ${args.server} per impostare la password.`);
-    if (r.ok) return;
+    if (r.ok) return ((await r.json().catch(() => null)) as { until?: number | null } | null)?.until ?? null;
     const motivo = ((await r.json().catch(() => null)) as { motivo?: string } | null)?.motivo ?? `HTTP ${r.status}`;
     throw new Error(
       r.status === 401 ? `Il server ha rifiutato la password di ${room} (${motivo}): BOARD_SECRET diverso da quello del server?` : `Password non impostata per ${room}: ${motivo}`,
@@ -213,6 +213,7 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
 
   // 2. una board per gruppo
   const skipped = new Set<number>();
+  const untils = new Map<number, number | null>(); // data di fine in vigore su ogni board
   const done: string[] = [];
   try {
     for (let g = 1; g <= args.gruppi; g++) {
@@ -237,7 +238,7 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
           throw new Error(`La board ${room} non ha ricevuto tutto il materiale (mancano ${lacking} elementi su ${material.els.length}). Può essere rimasta a metà: usa un altro nome per il corso.`);
         }
       }
-      if (args.password !== undefined) await applyAccess(room); // anche sulle board già piene: rilanciare serve a cambiare la password
+      if (args.password !== undefined) untils.set(g, await applyAccess(room)); // anche sulle board già piene: rilanciare serve a cambiare la password
       done.push(room);
     }
   } catch (e) {
@@ -254,7 +255,8 @@ Board già preparate prima dell'errore: ${done.join(", ")} (rilanciando il coman
     out(`Gruppo ${g} — ${room}${skipped.has(g) ? " (saltata: ha già del contenuto)" : ""}`);
     out(`  Trainer: ${link(room, args.trainer, "trainer", "editor")}`);
     if (args.password !== undefined) {
-      out(`  Allievi (accesso con password della sessione${args.fino ? `, fino al ${new Date(args.fino).toLocaleDateString("it-IT")}` : ""}): ${args.base}/b/${room}`);
+      const until = untils.get(g) ?? null;
+      out(`  Allievi (accesso con password della sessione, ${until ? `fino al ${new Date(until).toLocaleDateString("it-IT")}` : "senza data di fine"}): ${args.base}/b/${room}`);
     }
     if (students) {
       for (const s of students.filter((s) => s.group === g)) out(`  ${s.name} (link personale): ${link(room, s.name, s.uid, "participant")}`);

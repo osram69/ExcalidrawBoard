@@ -15,7 +15,7 @@ export interface BoardSession {
 
 /** I due depositi del browser; se non sono disponibili (privato, bloccati) le operazioni diventano innocue. */
 function stores(): Stores {
-  const none = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined };
+  const none = { getItem: () => null, setItem: () => undefined, removeItem: () => undefined, length: 0, key: () => null };
   const pick = (f: () => Storage) => {
     try {
       return f();

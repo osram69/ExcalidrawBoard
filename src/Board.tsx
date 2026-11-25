@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
 import type { MyVotes, VotePublic } from "../server/votes.ts";
+import { shouldReturnToLogin } from "./expiry";
 import { registerLibrary } from "./library";
 import { instantiate, TEMPLATES, type Template } from "./templates";
 import { TimerPill } from "./Timer";
@@ -290,13 +291,25 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
       };
       ws.onclose = (ev) => {
         if (stop) return;
-        if (ev.code === 4001) {
-          // accesso scaduto: niente ritentativi, si torna al login
+        if (shouldReturnToLogin(ev.code, session.exp, Date.now())) {
+          // accesso scaduto (detto dal server, o scaduto durante uno standby o una caduta di rete): niente ritentativi, si torna al login
           stop = true;
           onExpired();
           return;
         }
         setStatus("offline");
+        // dopo due tentativi falliti si chiede al server se l'accesso vale ancora (rifiutato, revocato o di un'altra board: login, non "offline" per sempre)
+        if (retry >= 2) {
+          fetch(`/auth/check?room=${encodeURIComponent(session.room)}`, { headers: { Authorization: `Bearer ${session.token}` } })
+            .then((r) => {
+              if (r.status === 401 && !stop) {
+                stop = true;
+                window.clearTimeout(timer);
+                onExpired();
+              }
+            })
+            .catch(() => undefined);
+        }
         timer = window.setTimeout(open, Math.min(8000, 500 * 2 ** retry++));
       };
     };

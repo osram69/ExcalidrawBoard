@@ -4,6 +4,8 @@ export interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+  readonly length: number; // come il vero Storage: serve a elencare le chiavi
+  key(index: number): string | null;
 }
 export interface Stores {
   local: StorageLike;
@@ -28,9 +30,25 @@ function quiet<T>(f: () => T, fallback: T): T {
   }
 }
 
-/** Salva l'accesso dopo un login riuscito. Con "ricordami" token e profilo restano sul dispositivo; senza, il token vale per la scheda e il profilo si cancella. */
+/** Toglie da un deposito i token di tutte le board (le altre chiavi non si toccano). */
+function removeAllTokens(st: StorageLike): void {
+  quiet(() => {
+    const keys: string[] = [];
+    for (let i = 0; i < st.length; i++) {
+      const k = st.key(i);
+      if (k && k.startsWith("board:token:")) keys.push(k);
+    }
+    for (const k of keys) st.removeItem(k);
+  }, undefined);
+}
+
+/**
+ * Salva l'accesso dopo un login riuscito. Con "ricordami" token e profilo restano sul dispositivo; senza, il token vale per la scheda,
+ * il profilo si cancella e anche gli accessi ricordati prima (di qualsiasi board) spariscono dal dispositivo.
+ */
 export function saveLogin(s: Stores, room: string, token: string, p: Profile): void {
   const keep = p.ricordami;
+  if (!keep) removeAllTokens(s.local);
   quiet(() => (keep ? s.local : s.session).setItem(TOKEN(room), token), undefined);
   quiet(() => (keep ? s.session : s.local).removeItem(TOKEN(room)), undefined);
   if (keep) quiet(() => s.local.setItem(PROFILE, JSON.stringify({ nome: p.nome, cognome: p.cognome, email: p.email, ricordami: true })), undefined);
@@ -42,11 +60,18 @@ export function readToken(s: Stores, room: string): string | null {
   return quiet(() => s.session.getItem(TOKEN(room)), null) ?? quiet(() => s.local.getItem(TOKEN(room)), null);
 }
 
-/** Toglie l'accesso a una board; con `forgetProfile` (pulsante "Esci") anche nome, cognome ed email ricordati. */
+/**
+ * Toglie l'accesso a una board. Con `forgetProfile` ("Esci") toglie invece gli accessi di TUTTE le board (dalla scheda e dal dispositivo)
+ * e anche nome, cognome ed email ricordati: su un computer condiviso la persona dopo non deve trovarsi dentro con l'accesso della precedente.
+ */
 export function clearAccess(s: Stores, room: string, forgetProfile: boolean): void {
   quiet(() => s.session.removeItem(TOKEN(room)), undefined);
   quiet(() => s.local.removeItem(TOKEN(room)), undefined);
-  if (forgetProfile) quiet(() => s.local.removeItem(PROFILE), undefined);
+  if (forgetProfile) {
+    removeAllTokens(s.session);
+    removeAllTokens(s.local);
+    quiet(() => s.local.removeItem(PROFILE), undefined);
+  }
 }
 
 export function loadProfile(s: Stores): Profile {

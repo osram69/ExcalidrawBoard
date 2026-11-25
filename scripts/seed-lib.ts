@@ -11,7 +11,7 @@ export interface SeedArgs {
   trainer: string;
   allievi?: string;
   password?: string; // password di sessione per il login degli allievi (uguale per tutti i gruppi)
-  fino?: number; // fine della sessione, ms epoch (fine giornata, ora locale)
+  fino?: number | null; // fine della sessione, ms epoch (fine giornata, ora locale); null = toglierla; assente = lasciare quella che c'è
 }
 
 const NOME_BOARD = /^[A-Za-z0-9_-]{1,64}$/;
@@ -70,8 +70,11 @@ export function parseArgs(argv: string[]): SeedArgs | { errore: string } {
   if (typeof base !== "string") return base;
   const password = opt["--password"];
   if (password !== undefined && (password.length < 8 || password.length > 200)) return { errore: "--password deve avere da 8 a 200 caratteri." };
-  let fino: number | undefined;
-  if (opt["--fino-al"] !== undefined) {
+  let fino: number | null | undefined;
+  if (opt["--fino-al"] === "nessuna") {
+    if (password === undefined) return { errore: "--fino-al si usa insieme a --password." };
+    fino = null;
+  } else if (opt["--fino-al"] !== undefined) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(opt["--fino-al"]);
     const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 23, 59, 59, 999) : null;
     if (!m || !d || d.getMonth() !== Number(m[2]) - 1 || d.getDate() !== Number(m[3])) return { errore: "--fino-al vuole una data nel formato AAAA-MM-GG (per esempio 2026-12-20)." };

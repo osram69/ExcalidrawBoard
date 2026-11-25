@@ -81,15 +81,19 @@ npm run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" --fin
 
 - **Password e fine sessione:** `--password` (da 8 a 200 caratteri) vale per tutte le board del corso e si conserva sul server **solo come impronta** (scrypt), mai in chiaro;
   `--fino-al AAAA-MM-GG` è l'ultimo giorno (fino a fine giornata): dopo, nessuno entra e chi è collegato viene scollegato e riportato al login. Rilanciando il comando con un'altra password su board già piene,
-  la password si aggiorna. La password non viene mai stampata dal comando.
+  la password si aggiorna e **la data di fine resta quella di prima** (se non indichi `--fino-al`); `--fino-al nessuna` la toglie. Il comando stampa la data in vigore per ogni board.
+  La password non viene mai stampata dal comando.
 - **Edizioni passate:** ogni sessione ha le sue board, la sua password e la sua data di fine, quindi chi ha seguito l'edizione precedente non entra in quella nuova.
-- **Identità personale:** l'identificativo di ciascuno deriva dall'email (con un'impronta: la mail non è visibile agli altri), quindi cursori, oggetti e puntini di voto sono per persona. L'email **non è verificata**: identifica,
+- **Identità personale:** l'identificativo di ciascuno deriva dall'email (con un'impronta firmata con il segreto del server: la mail non è visibile agli altri e nessuno può ricavare l'identificativo di una mail che conosce), quindi cursori, oggetti e puntini di voto sono per persona. L'email **non è verificata**: identifica,
   l'autenticazione è la password della sessione.
 - **"Ricordami su questo dispositivo":** se spuntato, nome, cognome ed email restano nel browser (il login successivo, anche su un'altra board, li ripropone) e l'accesso dura più a lungo
   (fino alla fine della sessione, al massimo `LOGIN_REMEMBER_DAYS` giorni, predefinito 7), così riaprendo la board non si rifà il login. **La password non viene mai salvata nel browser.**
-  Se non è spuntato non si ricorda nulla. Il pulsante **Esci** nella barra in alto cancella accesso e dati ricordati (utile sui computer condivisi).
+  Se non è spuntato non si ricorda nulla. Il pulsante **Esci** nella barra in alto cancella gli accessi di **tutte** le board e i dati ricordati su quel dispositivo (utile sui computer condivisi); anche un login senza "ricordami" cancella gli accessi ricordati prima.
 - **Durata dell'accesso:** `LOGIN_TOKEN_HOURS` (predefinito 12) senza "ricordami"; mai oltre la data di fine.
-- **Tentativi:** dopo 10 password sbagliate in 10 minuti, dalla stessa connessione per la stessa board, il login risponde "troppi tentativi" per 10 minuti (dietro il tunnel Cloudflare si usa l'indirizzo `CF-Connecting-IP`).
+- **Tentativi:** dopo 10 password sbagliate in 10 minuti per la stessa persona (indirizzo, board ed email), il login risponde "troppi tentativi" per 10 minuti; c'è anche un tetto per rete (100 errori su una board), così una classe dietro lo stesso indirizzo di ufficio non si blocca per un errore di battitura dei compagni.
+  Se su una board arrivano più di 500 errori in 10 minuti, ogni tentativo viene rallentato di un secondo. La verifica della password non blocca il server (gira nel pool di thread, al massimo 4 insieme; oltre, il login risponde "server occupato, riprova").
+  Gli indirizzi IPv6 si contano per rete /64. Dietro il tunnel Cloudflare si usa l'indirizzo `CF-Connecting-IP`: **non esporre la porta del server direttamente su internet**, altrimenti l'intestazione si può falsificare (con il `docker-compose.yml` fornito la porta è solo locale e passa dal tunnel).
+  Se il blocco scatta per errore, basta aspettare 10 minuti o riavviare il server.
 - **Il trainer** continua a entrare con il suo link firmato (`editor`), stampato dal comando; il login con password dà sempre il ruolo `participant`.
 - **Link personali** (`--allievi file`) restano disponibili come alternativa al login, per chi vuole dare a ognuno un link.
 - **Orologio:** scadenze e data di fine usano l'orologio del Raspberry: tienilo sincronizzato (NTP, attivo di default su Raspberry Pi OS).

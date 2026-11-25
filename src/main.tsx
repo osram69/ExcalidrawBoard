@@ -1,4 +1,4 @@
-import { StrictMode, useEffect, useState } from "react";
+import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Board } from "./Board";
 import { Login } from "./Login";
@@ -47,6 +47,12 @@ function BoardPage({ room }: { room: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [room]);
 
+  // stabile tra un render e l'altro: è tra le dipendenze del collegamento della board, che altrimenti si riaprirebbe
+  const onExpired = useCallback(() => {
+    dropSession(room, false);
+    setState({ kind: "login", reason: "La sessione è terminata o il tuo accesso è scaduto: accedi di nuovo." });
+  }, [room]);
+
   if (state.kind === "checking") return <div className="board-msg"><p>Verifico l'accesso…</p></div>;
   if (state.kind === "login") {
     return (
@@ -63,10 +69,7 @@ function BoardPage({ room }: { room: string }) {
   return (
     <Board
       session={state.session}
-      onExpired={() => {
-        dropSession(room, false);
-        setState({ kind: "login", reason: "La sessione è terminata o il tuo accesso è scaduto: accedi di nuovo." });
-      }}
+      onExpired={onExpired}
       onLogout={
         state.session.email
           ? () => {

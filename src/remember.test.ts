@@ -4,7 +4,16 @@ import { clearAccess, loadProfile, readToken, reasonText, saveLogin, type Storag
 
 const fake = (): StorageLike & { data: Map<string, string> } => {
   const data = new Map<string, string>();
-  return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
+  return {
+    data,
+    getItem: (k) => data.get(k) ?? null,
+    setItem: (k, v) => void data.set(k, v),
+    removeItem: (k) => void data.delete(k),
+    get length() {
+      return data.size;
+    },
+    key: (i) => [...data.keys()][i] ?? null,
+  };
 };
 const stores = () => ({ local: fake(), session: fake() });
 const profile = (o = {}) => ({ nome: "Anna", cognome: "Rossi", email: "anna@esempio.it", ricordami: true, ...o });
@@ -30,7 +39,7 @@ test("senza ricordami: token solo nella sessione, nessun profilo, e quanto ricor
 test("il token di una board non tocca quello di un'altra", () => {
   const s = stores();
   saveLogin(s, "corso-g1", "T1", profile());
-  saveLogin(s, "corso-g2", "T2", profile({ ricordami: false }));
+  saveLogin(s, "corso-g2", "T2", profile());
   assert.equal(readToken(s, "corso-g1"), "T1");
   assert.equal(readToken(s, "corso-g2"), "T2");
   assert.equal(readToken(s, "corso-g3"), null);
@@ -68,7 +77,8 @@ test("loadProfile: valori mancanti, corrotti o di tipo sbagliato", () => {
 });
 
 test("storage non disponibile (privato, bloccato): nessuna eccezione", () => {
-  const boom: StorageLike = { getItem: () => { throw new Error("bloccato"); }, setItem: () => { throw new Error("bloccato"); }, removeItem: () => { throw new Error("bloccato"); } };
+  const fail = () => { throw new Error("bloccato"); };
+  const boom: StorageLike = { getItem: fail, setItem: fail, removeItem: fail, key: fail, get length(): number { return fail(); } };
   const s = { local: boom, session: boom };
   assert.doesNotThrow(() => saveLogin(s, "r", "T", profile()));
   assert.doesNotThrow(() => clearAccess(s, "r", true));
@@ -82,4 +92,42 @@ test("reasonText: messaggio per ogni motivo del server", () => {
   assert.match(reasonText("non valido"), /non (è )?valid/i);
   assert.ok(reasonText("qualcosa di nuovo").length > 0);
   assert.ok(reasonText(undefined).length > 0);
+});
+
+test("Esci (clearAccess con forget) toglie i token di TUTTE le board, dalla sessione e dal dispositivo", () => {
+  const s = stores();
+  saveLogin(s, "g1", "T1", profile());
+  saveLogin(s, "g2", "T2", profile());
+  s.session.setItem("board:token:g3", "T3");
+  s.local.setItem("altra-chiave", "resta");
+  clearAccess(s, "g1", true);
+  for (const r of ["g1", "g2", "g3"]) assert.equal(readToken(s, r), null, r);
+  assert.equal(s.local.getItem("altra-chiave"), "resta", "le chiavi che non sono token non si toccano");
+  assert.equal(loadProfile(s).email, "");
+});
+
+test("clearAccess senza forget tocca solo la board indicata", () => {
+  const s = stores();
+  saveLogin(s, "g1", "T1", profile());
+  saveLogin(s, "g2", "T2", profile());
+  clearAccess(s, "g1", false);
+  assert.equal(readToken(s, "g1"), null);
+  assert.equal(readToken(s, "g2"), "T2");
+});
+
+test("un login senza ricordami cancella gli accessi ricordati sul dispositivo per le altre board", () => {
+  const s = stores();
+  saveLogin(s, "g1", "T1", profile());
+  saveLogin(s, "g2", "T2", profile({ ricordami: false }));
+  assert.equal(readToken(s, "g1"), null, "il token ricordato della board g1 non deve restare sul dispositivo");
+  assert.equal(readToken(s, "g2"), "T2");
+  assert.equal(s.local.getItem("board:token:g1"), null);
+});
+
+test("un login con ricordami non tocca gli altri accessi ricordati", () => {
+  const s = stores();
+  saveLogin(s, "g1", "T1", profile());
+  saveLogin(s, "g2", "T2", profile());
+  assert.equal(readToken(s, "g1"), "T1");
+  assert.equal(readToken(s, "g2"), "T2");
 });

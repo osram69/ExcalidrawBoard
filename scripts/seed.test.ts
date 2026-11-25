@@ -328,3 +328,16 @@ test("se il server rifiuta la password (segreto diverso) l'errore è chiaro", as
   assert.equal(code, 1);
   assert.match(out.join("\n"), /BOARD_SECRET/);
 });
+
+test("rilanciare con la sola --password conserva la data di fine; --fino-al nessuna la toglie", async () => {
+  const first = await run(["corso15", "1", pngFile("ok16.png"), "--password", "dicembre-2026", "--fino-al", "2099-12-20"]);
+  assert.equal(first.code, 0, first.text);
+  assert.match(first.text, /20\/12\/2099/);
+  const again = await run(["corso15", "1", pngFile("ok17.png"), "--password", "gennaio-2027"]);
+  assert.equal(again.code, 0, again.text);
+  assert.match(again.text, /20\/12\/2099/, "la data di fine deve restare");
+  const cleared = await run(["corso15", "1", pngFile("ok18.png"), "--password", "gennaio-2027", "--fino-al", "nessuna"]);
+  assert.equal(cleared.code, 0, cleared.text);
+  assert.match(cleared.text, /senza data di fine/);
+  assert.ok(!/20\/12\/2099/.test(cleared.text));
+});

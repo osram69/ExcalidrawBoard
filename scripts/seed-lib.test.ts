@@ -196,3 +196,10 @@ test("parseArgs: password e data non validi", () => {
   const r: any = parseArgs(["corso", "2", "x.png", "--fino-al", "2099-12-20"]);
   assert.ok(typeof r.errore === "string" && /--password/.test(r.errore), "la data senza password non ha senso");
 });
+
+test("parseArgs: --fino-al nessuna toglie la data di fine (solo con --password)", () => {
+  const a = ok(parseArgs(["corso", "2", "x.png", "--password", "dicembre-2026", "--fino-al", "nessuna"]));
+  assert.equal(a.fino, null);
+  const r: any = parseArgs(["corso", "2", "x.png", "--fino-al", "nessuna"]);
+  assert.ok(typeof r.errore === "string" && /--password/.test(r.errore));
+});
