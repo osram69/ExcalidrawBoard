@@ -61,3 +61,73 @@ test("featureSnapshot include il timer corrente", () => {
   assert.equal(snap.timer.state.status, "running");
   assert.equal(typeof snap.timer.now, "number");
 });
+
+const addNote = (room: Room, id: string) => room.els.set(id, { id, version: 1, versionNonce: 1, type: "rectangle", customData: { kind: "nota" } } as any);
+
+test("votazione: l'editor apre, i peer ricevono lo stato e ciascuno i propri voti", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 3 });
+  for (const { got } of peers) {
+    assert.equal(got.filter((m) => m.t === "votes").length, 1);
+    assert.equal(got.find((m) => m.t === "votes").open, true);
+    assert.deepEqual(got.find((m) => m.t === "my-votes"), { t: "my-votes", mine: {}, left: 3 });
+  }
+});
+
+test("votazione: un participant vota, tutti vedono i totali, solo lui riceve my-votes", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 3 });
+  peers.forEach(({ got }) => (got.length = 0));
+  assert.equal(handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "n1", delta: 1 }), true);
+  for (const { got } of peers) assert.deepEqual(got.find((m) => m.t === "votes").totals, { n1: 1 });
+  assert.deepEqual(peers[1].got.find((m) => m.t === "my-votes"), { t: "my-votes", mine: { n1: 1 }, left: 2 });
+  assert.equal(peers[0].got.some((m) => m.t === "my-votes"), false);
+});
+
+test("votazione: anche l'editor può votare", () => {
+  const { room, peers } = setup(["editor"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open" });
+  handleFeatureMessage(room, peers[0].peer, { t: "vote", id: "n1", delta: 1 });
+  assert.deepEqual(room.votes.publicState().totals, { n1: 1 });
+});
+
+test("votazione: participant e viewer non la controllano", () => {
+  const { room, peers } = setup(["editor", "participant", "viewer"]);
+  for (const i of [1, 2]) handleFeatureMessage(room, peers[i].peer, { t: "vote-ctl", action: "open" });
+  assert.equal(room.votes.publicState().open, false);
+  assert.equal(peers.every(({ got }) => got.length === 0), true);
+});
+
+test("votazione: un viewer non vota", () => {
+  const { room, peers } = setup(["editor", "viewer"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open" });
+  peers.forEach(({ got }) => (got.length = 0));
+  assert.equal(handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "n1", delta: 1 }), true);
+  assert.deepEqual(room.votes.publicState().totals, {});
+  assert.equal(peers.every(({ got }) => got.length === 0), true);
+});
+
+test("votazione: messaggi malformati ignorati senza eccezioni", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open" });
+  peers.forEach(({ got }) => (got.length = 0));
+  for (const m of [{ t: "vote", id: 42, delta: 1 }, { t: "vote", id: "n1", delta: 5 }, { t: "vote" }, { t: "vote-ctl", action: "open", perPerson: 999 }]) {
+    assert.doesNotThrow(() => handleFeatureMessage(room, peers[1].peer, m));
+    assert.doesNotThrow(() => handleFeatureMessage(room, peers[0].peer, m));
+  }
+  assert.equal(peers.every(({ got }) => got.length === 0), true);
+});
+
+test("featureSnapshot include voti e voti miei", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 4 });
+  handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "n1", delta: 1 });
+  const snap = featureSnapshot(room, peers[1].peer) as any;
+  assert.deepEqual(snap.votes, { open: true, perPerson: 4, totals: { n1: 1 } });
+  assert.deepEqual(snap.myVotes, { mine: { n1: 1 }, left: 3 });
+});

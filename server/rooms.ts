@@ -5,6 +5,7 @@ import path from "node:path";
 import type { WebSocket } from "ws";
 import type { Role } from "./auth.ts";
 import { RoomTimer } from "./timer.ts";
+import { RoomVotes } from "./votes.ts";
 
 export interface El {
   id: string;
@@ -50,11 +51,17 @@ export class Room {
   readonly files = new Map<string, BinFile>();
   readonly peers = new Set<Peer>();
   readonly timer = new RoomTimer();
+  readonly votes: RoomVotes;
   private saveTimer: NodeJS.Timeout | null = null;
   private dirtyFiles = new Set<string>();
   private idle: NodeJS.Timeout | null = null;
 
   constructor(readonly id: string, private dir: string, private onEmpty: () => void) {
+    // votabili: solo note adesive esistenti (customData.kind === "nota"), non cancellate
+    this.votes = new RoomVotes(path.join(dir, "votes.json"), (id) => {
+      const e = this.els.get(id);
+      return !!e && !e.isDeleted && (e.customData as { kind?: string } | undefined)?.kind === "nota";
+    });
     try {
       const j = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
       for (const e of j.elements || []) if (e && typeof e.id === "string" && wellFormed(e)) this.els.set(e.id, e);
