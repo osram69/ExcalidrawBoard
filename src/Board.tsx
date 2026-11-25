@@ -3,7 +3,9 @@ import "@excalidraw/excalidraw/index.css";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
+import type { MyVotes, VotePublic } from "../server/votes.ts";
 import { TimerPill } from "./Timer";
+import { VoteLayer, VotePanel, type NoteBox, type ViewInfo } from "./Votes";
 
 type Status = "connecting" | "online" | "offline";
 interface Peer { id: string; name: string; color: string; role: string }
@@ -24,6 +26,15 @@ export function Board({ session }: { session: BoardSession }) {
   const [api, setApi] = useState<any>(null);
   const [status, setStatus] = useState<Status>("connecting");
   const [timer, setTimer] = useState<{ state: TimerState; offsetMs: number }>({ state: { status: "idle", endsAt: 0, remainingMs: 0, durationMs: 0 }, offsetMs: 0 });
+  const [votes, setVotes] = useState<VotePublic>({ open: false, perPerson: 5, totals: {} });
+  const [myVotes, setMyVotes] = useState<MyVotes>({ mine: {}, left: 0 });
+  const [voteView, setVoteView] = useState<{ view: ViewInfo; notes: NoteBox[] }>({ view: { scrollX: 0, scrollY: 0, zoom: 1 }, notes: [] });
+  const [budgetDraft, setBudgetDraft] = useState(5);
+  const viewRaf = useRef<number | null>(null);
+  const viewKey = useRef("");
+  const votesActive = votes.open || Object.keys(votes.totals).length > 0;
+  const votesActiveRef = useRef(false);
+  votesActiveRef.current = votesActive;
   const wsRef = useRef<WebSocket | null>(null);
   const sentVersion = useRef(new Map<string, string>()); // id -> "versione:nonce" già noto al server
   const sentFiles = useRef(new Set<string>());
@@ -87,6 +98,29 @@ export function Board({ session }: { session: BoardSession }) {
     const merged = reconcileElements(a.getSceneElementsIncludingDeleted(), els as any, a.getAppState());
     a.updateScene({ elements: merged, captureUpdate: CaptureUpdateAction.NEVER });
   }, []);
+
+  /** Posizione e zoom della vista e note visibili, per i badge dei voti: al massimo una volta per frame, solo se cambia qualcosa. */
+  const scheduleVoteView = useCallback(() => {
+    if (viewRaf.current !== null) return;
+    viewRaf.current = requestAnimationFrame(() => {
+      viewRaf.current = null;
+      const a = apiRef.current;
+      if (!a || !votesActiveRef.current) return;
+      const s = a.getAppState();
+      const notes: NoteBox[] = a
+        .getSceneElements()
+        .filter((e: any) => !e.isDeleted && e.customData?.kind === "nota")
+        .map((e: any) => ({ id: e.id, x: e.x, y: e.y, width: e.width, height: e.height }));
+      const next = { view: { scrollX: s.scrollX, scrollY: s.scrollY, zoom: s.zoom.value }, notes };
+      const key = JSON.stringify(next);
+      if (key === viewKey.current) return;
+      viewKey.current = key;
+      setVoteView(next);
+    });
+  }, []);
+  useEffect(() => {
+    if (votesActive) scheduleVoteView();
+  }, [votesActive, scheduleVoteView]);
 
   /** Centro della parte di lavagna visibile, in coordinate della scena. */
   const viewCenter = () => {
@@ -197,8 +231,14 @@ export function Board({ session }: { session: BoardSession }) {
           }
           pushCollaborators();
           if (m.timer) setTimer({ state: m.timer.state, offsetMs: m.timer.now - Date.now() });
+          if (m.votes) setVotes(m.votes);
+          if (m.myVotes) setMyVotes(m.myVotes);
           if (!readonly) flush(); // dopo una riconnessione rimanda ciò che si è disegnato offline
         } else if (m.t === "timer") setTimer({ state: m.state, offsetMs: m.now - Date.now() });
+        else if (m.t === "votes") {
+          setVotes({ open: m.open, perPerson: m.perPerson, totals: m.totals });
+          if (m.open) setBudgetDraft(m.perPerson);
+        } else if (m.t === "my-votes") setMyVotes({ mine: m.mine, left: m.left });
         else if (m.t === "els") applyRemote(m.els);
         else if (m.t === "deny") {
           // il server ha respinto una modifica a oggetti altrui: si ripristina la loro versione
@@ -276,6 +316,7 @@ export function Board({ session }: { session: BoardSession }) {
                 apiRef.current?.updateScene({ appState: { selectedElementIds: next } });
               }
             }
+            if (votesActiveRef.current) scheduleVoteView();
             if (!readonly && flushTimer.current === null) flushTimer.current = window.setTimeout(flush, 60);
           }}
           onPointerUpdate={(p: any) => {
@@ -286,6 +327,8 @@ export function Board({ session }: { session: BoardSession }) {
           }}
         />
         <TimerPill state={timer.state} offsetMs={timer.offsetMs} canControl={session.role === "editor"} send={send} />
+        {votesActive && <VoteLayer notes={voteView.notes} view={voteView.view} votes={votes} myVotes={myVotes} canVote={!readonly} send={send} />}
+        <VotePanel votes={votes} myVotes={myVotes} isEditor={session.role === "editor"} canVote={!readonly} send={send} budgetDraft={budgetDraft} setBudgetDraft={setBudgetDraft} />
         {!readonly && api && (
           <div className="board-palette" role="toolbar" aria-label="Note e frame">
             <span className="pal-label">Nota</span>

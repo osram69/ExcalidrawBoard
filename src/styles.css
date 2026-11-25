@@ -43,3 +43,17 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .board-timer.ended .timer-clock { color: var(--flame); }
 .board-timer.flash { animation: timer-flash 0.5s steps(2, jump-none) 10; }
 @keyframes timer-flash { 0% { background: #fff; } 100% { background: #ffd8d2; } }
+
+.vote-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 4; }
+.vote-badge { position: absolute; transform: translate(-100%, -50%); display: flex; align-items: center; gap: 2px; padding: 2px 4px; background: #fff; border: 1px solid #ccc; border-radius: 99px; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); font-size: 13px; }
+.vote-badge button { pointer-events: auto; width: 20px; height: 20px; line-height: 1; border: none; border-radius: 50%; background: #f1f1f1; font: inherit; cursor: pointer; padding: 0; }
+.vote-badge button:hover:not(:disabled) { background: var(--flame); color: #fff; }
+.vote-badge button:disabled { opacity: 0.35; cursor: default; }
+.vote-count { min-width: 20px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
+.vote-count.mine { color: var(--flame); }
+.board-votepanel { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 10px; padding: 5px 12px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); font-size: 13px; }
+.vote-controls { display: flex; align-items: center; gap: 6px; }
+.vote-budget { display: inline-flex; align-items: center; gap: 5px; color: #666; font-size: 12px; }
+.vote-budget input { width: 48px; font: inherit; padding: 2px 4px; border: 1px solid #ddd; border-radius: 6px; }
+.board-votepanel button { border: 1px solid #ddd; background: #fff; border-radius: 7px; padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.board-votepanel button:hover { border-color: var(--flame); color: var(--flame); }
