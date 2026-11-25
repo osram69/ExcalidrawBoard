@@ -1,7 +1,9 @@
 import { CaptureUpdateAction, convertToExcalidrawElements, Excalidraw, reconcileElements, restoreElements } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
+import { TimerPill } from "./Timer";
 
 type Status = "connecting" | "online" | "offline";
 interface Peer { id: string; name: string; color: string; role: string }
@@ -21,6 +23,7 @@ export function Board({ session }: { session: BoardSession }) {
   const apiRef = useRef<any>(null);
   const [api, setApi] = useState<any>(null);
   const [status, setStatus] = useState<Status>("connecting");
+  const [timer, setTimer] = useState<{ state: TimerState; offsetMs: number }>({ state: { status: "idle", endsAt: 0, remainingMs: 0, durationMs: 0 }, offsetMs: 0 });
   const wsRef = useRef<WebSocket | null>(null);
   const sentVersion = useRef(new Map<string, string>()); // id -> "versione:nonce" già noto al server
   const sentFiles = useRef(new Set<string>());
@@ -193,8 +196,10 @@ export function Board({ session }: { session: BoardSession }) {
             if (m.els.length) apiRef.current.scrollToContent(undefined, { fitToContent: true });
           }
           pushCollaborators();
+          if (m.timer) setTimer({ state: m.timer.state, offsetMs: m.timer.now - Date.now() });
           if (!readonly) flush(); // dopo una riconnessione rimanda ciò che si è disegnato offline
-        } else if (m.t === "els") applyRemote(m.els);
+        } else if (m.t === "timer") setTimer({ state: m.state, offsetMs: m.now - Date.now() });
+        else if (m.t === "els") applyRemote(m.els);
         else if (m.t === "deny") {
           // il server ha respinto una modifica a oggetti altrui: si ripristina la loro versione
           const back = new Map<string, any>((restoreElements(m.els, null) as any[]).map((e: any) => [e.id, e]));
@@ -280,6 +285,7 @@ export function Board({ session }: { session: BoardSession }) {
             send({ t: "ptr", x: p.pointer.x, y: p.pointer.y, tool: p.pointer.tool, button: p.button, sel: Object.keys(apiRef.current?.getAppState().selectedElementIds || {}) });
           }}
         />
+        <TimerPill state={timer.state} offsetMs={timer.offsetMs} canControl={session.role === "editor"} send={send} />
         {!readonly && api && (
           <div className="board-palette" role="toolbar" aria-label="Note e frame">
             <span className="pal-label">Nota</span>

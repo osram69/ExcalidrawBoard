@@ -32,3 +32,14 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .pal-frame { border: 1px solid #ddd; background: #fff; border-radius: 7px; padding: 4px 10px; font: inherit; font-size: 13px; cursor: pointer; }
 .pal-frame:hover { border-color: var(--flame); color: var(--flame); }
 .pal-photo { display: inline-block; }
+
+.board-timer { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); font-size: 13px; }
+.timer-clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 66px; text-align: center; }
+.timer-tag { font-size: 12px; color: #666; }
+.timer-controls { display: flex; gap: 6px; }
+.board-timer button { border: 1px solid #ddd; background: #fff; border-radius: 7px; padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; }
+.board-timer button:hover { border-color: var(--flame); color: var(--flame); }
+.board-timer .timer-mute { border: none; padding: 2px 4px; }
+.board-timer.ended .timer-clock { color: var(--flame); }
+.board-timer.flash { animation: timer-flash 0.5s steps(2, jump-none) 10; }
+@keyframes timer-flash { 0% { background: #fff; } 100% { background: #ffd8d2; } }
