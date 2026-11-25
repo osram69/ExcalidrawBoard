@@ -93,6 +93,7 @@ test("presence: chi c'è in ogni board (solo chiave, nome e ruolo) e il turno ap
   assert.deepEqual(p.rooms["aula-d-r2-s1"], [{ key: "marco", name: "MARCO", role: "participant" }]);
   assert.equal(p.current?.round, 2);
   assert.deepEqual(p.current?.rooms.map((r) => r.n), [1, 2]);
+  assert.deepEqual(p.history.map((h) => [h.round, h.rooms.map((r) => [r.n, r.id])]), [[1, [[1, "aula-d-r1-s1"]]]], "i turni chiusi finiscono nello storico");
   assert.ok(!JSON.stringify(p).includes("@"), "nessuna email");
 });
 

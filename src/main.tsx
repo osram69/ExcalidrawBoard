@@ -3,17 +3,21 @@ import { createRoot } from "react-dom/client";
 import { Board } from "./Board";
 import { Login } from "./Login";
 import { reasonText } from "./remember";
-import { acceptLogin, dropSession, loadSession, roomFromPath, type BoardSession } from "./session";
+import { closedAula, gotoUrl } from "./goto";
+import { acceptLogin, dropSession, loadSession, moveTo, roomFromPath, type BoardSession } from "./session";
 import "./styles.css";
 
 type State = { kind: "checking" } | { kind: "login"; reason?: string } | { kind: "board"; session: BoardSession };
 
 /** Chiede al server se l'accesso salvato vale ancora (non scaduto, non di un'altra board). Se il server non risponde, non blocca. */
-async function checkAccess(session: BoardSession): Promise<{ ok: true } | { ok: false; motivo?: string }> {
+async function checkAccess(session: BoardSession): Promise<{ ok: true } | { ok: false; motivo?: string; aula?: string }> {
   try {
     const r = await fetch(`/auth/check?room=${encodeURIComponent(session.room)}`, { headers: { Authorization: `Bearer ${session.token}` } });
     if (r.ok) return { ok: true };
-    if (r.status === 401) return { ok: false, motivo: (await r.json().catch(() => null))?.motivo };
+    if (r.status === 401) {
+      const j = await r.json().catch(() => null);
+      return { ok: false, motivo: j?.motivo, aula: closedAula(j) ?? undefined };
+    }
   } catch {
     /* server non raggiungibile: la board mostrerà "offline" e ritenterà */
   }
@@ -36,7 +40,11 @@ function BoardPage({ room }: { room: string }) {
     checkAccess(s).then((r) => {
       if (!alive) return;
       if (r.ok) setState({ kind: "board", session: s });
-      else {
+      else if (r.aula) {
+        // una stanza chiusa (o non assegnata a questa persona): si torna all'aula
+        dropSession(room, false);
+        location.replace(gotoUrl(r.aula));
+      } else {
         dropSession(room, false);
         setState({ kind: "login", reason: reasonText(r.motivo) });
       }
@@ -52,6 +60,15 @@ function BoardPage({ room }: { room: string }) {
     dropSession(room, false);
     setState({ kind: "login", reason: "La sessione è terminata o il tuo accesso è scaduto: accedi di nuovo." });
   }, [room]);
+
+  const onGoto = useCallback((to: string, token: string) => moveTo(to, token), []);
+  const onBackToAula = useCallback(
+    (aula: string) => {
+      dropSession(room, false);
+      location.assign(gotoUrl(aula));
+    },
+    [room],
+  );
 
   if (state.kind === "checking") return <div className="board-msg"><p>Verifico l'accesso…</p></div>;
   if (state.kind === "login") {
@@ -70,6 +87,8 @@ function BoardPage({ room }: { room: string }) {
     <Board
       session={state.session}
       onExpired={onExpired}
+      onGoto={onGoto}
+      onBackToAula={onBackToAula}
       onLogout={
         state.session.email
           ? () => {

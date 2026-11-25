@@ -83,3 +83,33 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .login-error { margin: 0; padding: 8px 12px; background: #ffe1dd; color: #8a1c10; border-radius: 8px; font-size: 14px; }
 .login-card button[type="submit"] { padding: 11px; border: 0; border-radius: 10px; background: var(--flame); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
 .login-card button[type="submit"]:disabled { opacity: 0.6; cursor: default; }
+
+/* pannelli del trainer: stanze e invito */
+.chip-room { background: rgba(255, 106, 69, 0.4); }
+.side-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 340px; max-width: calc(100% - 16px); z-index: 7; display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow: auto; background: #fff; border-radius: 14px; box-shadow: 0 6px 30px rgba(19, 17, 23, 0.25); font-size: 14px; }
+.side-head { display: flex; align-items: center; justify-content: space-between; }
+.side-head h2 { margin: 0; font-size: 17px; }
+.side-head button { border: 0; background: none; font-size: 22px; line-height: 1; cursor: pointer; }
+.side-panel section { display: flex; flex-direction: column; gap: 8px; }
+.side-panel h3 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: #666; }
+.side-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.side-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.side-list em { color: #666; font-size: 12px; font-style: normal; }
+.side-note { margin: 0; color: #666; font-size: 13px; }
+.side-room { display: flex; flex-direction: column; gap: 6px; padding: 8px; background: #f7f4ee; border-radius: 10px; }
+.side-room-head { display: flex; align-items: center; justify-content: space-between; }
+.side-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.side-col { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.side-panel input, .side-panel select { font: inherit; padding: 5px 8px; border: 1px solid #ccc; border-radius: 7px; }
+.side-row input[type="number"] { width: 64px; }
+.side-row input[readonly] { flex: 1; min-width: 0; }
+.side-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.side-btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font: inherit; cursor: pointer; }
+.side-btn:hover:not(:disabled) { border-color: var(--flame); color: var(--flame); }
+.side-btn:disabled { opacity: 0.5; cursor: default; }
+.side-btn.primary { background: var(--flame); border-color: var(--flame); color: #fff; }
+.side-btn.primary:hover:not(:disabled) { background: var(--ember); color: #fff; }
+.side-btn.danger { border-color: #e03131; color: #c92a2a; }
+.side-error { margin: 0; padding: 7px 10px; background: #ffe1dd; color: #8a1c10; border-radius: 8px; }
+.side-error button { margin-left: 6px; border: 0; background: none; text-decoration: underline; cursor: pointer; }
+.side-ok { margin: 0; padding: 7px 10px; background: #d3f9d8; color: #1b5e20; border-radius: 8px; }

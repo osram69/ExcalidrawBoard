@@ -5,6 +5,10 @@ import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
 import type { MyVotes, VotePublic } from "../server/votes.ts";
 import { shouldReturnToLogin } from "./expiry";
+import { closedAula } from "./goto";
+import { Invite } from "./Invite";
+import { Rooms } from "./Rooms";
+import type { PresenceInfo } from "./roomsLogic";
 import { registerLibrary } from "./library";
 import { instantiate, TEMPLATES, type Template } from "./templates";
 import { TimerPill } from "./Timer";
@@ -28,9 +32,11 @@ interface BoardProps {
   session: BoardSession;
   onExpired: () => void; // il server ha chiuso il collegamento perché l'accesso è scaduto (codice 4001)
   onLogout?: () => void; // "Esci": solo per chi è entrato con il login
+  onGoto: (room: string, token: string) => void; // il server ci sposta in un'altra board (stanza o aula)
+  onBackToAula: (aula: string) => void; // la stanza è chiusa: si torna all'aula
 }
 
-export function Board({ session, onExpired, onLogout }: BoardProps) {
+export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: BoardProps) {
   const apiRef = useRef<any>(null);
   const [api, setApi] = useState<any>(null);
   const [status, setStatus] = useState<Status>("connecting");
@@ -40,6 +46,10 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
   const [voteView, setVoteView] = useState<{ view: ViewInfo; notes: NoteBox[] }>({ view: { scrollX: 0, scrollY: 0, zoom: 1 }, notes: [] });
   const [budgetDraft, setBudgetDraft] = useState(5);
   const [tplOpen, setTplOpen] = useState(false);
+  const [presence, setPresence] = useState<PresenceInfo | null>(null); // chi è collegato nel corso (solo per il trainer)
+  const [where, setWhere] = useState<{ aula: string; round: number | null; n: number | null } | null>(null);
+  const [roomsErr, setRoomsErr] = useState<string | null>(null);
+  const [panel, setPanel] = useState<null | "stanze" | "invita">(null);
   const viewRaf = useRef<number | null>(null);
   const viewKey = useRef("");
   const votesActive = votes.open || Object.keys(votes.totals).length > 0;
@@ -256,12 +266,16 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
           if (m.timer) setTimer({ state: m.timer.state, offsetMs: m.timer.now - Date.now() });
           if (m.votes) setVotes(m.votes);
           if (m.myVotes) setMyVotes(m.myVotes);
+          if (m.course) setWhere(m.course);
           if (!readonly) flush(); // dopo una riconnessione rimanda ciò che si è disegnato offline
         } else if (m.t === "timer") setTimer({ state: m.state, offsetMs: m.now - Date.now() });
         else if (m.t === "votes") {
           setVotes({ open: m.open, perPerson: m.perPerson, totals: m.totals });
           if (m.open) setBudgetDraft(m.perPerson);
         } else if (m.t === "my-votes") setMyVotes({ mine: m.mine, left: m.left });
+        else if (m.t === "presence") setPresence({ rooms: m.rooms, current: m.current, history: m.history });
+        else if (m.t === "goto") onGoto(m.room, m.token);
+        else if (m.t === "rooms-error") setRoomsErr(m.motivo);
         else if (m.t === "els") applyRemote(m.els);
         else if (m.t === "deny") {
           // il server ha respinto una modifica a oggetti altrui: si ripristina la loro versione
@@ -301,11 +315,13 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
         // dopo due tentativi falliti si chiede al server se l'accesso vale ancora (rifiutato, revocato o di un'altra board: login, non "offline" per sempre)
         if (retry >= 2) {
           fetch(`/auth/check?room=${encodeURIComponent(session.room)}`, { headers: { Authorization: `Bearer ${session.token}` } })
-            .then((r) => {
+            .then(async (r) => {
               if (r.status === 401 && !stop) {
+                const aula = closedAula(await r.json().catch(() => null));
                 stop = true;
                 window.clearTimeout(timer);
-                onExpired();
+                if (aula) onBackToAula(aula);
+                else onExpired();
               }
             })
             .catch(() => undefined);
@@ -319,7 +335,7 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
       window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [api, session.room, session.token, readonly, applyRemote, flush, pushCollaborators, onExpired]);
+  }, [api, session.room, session.token, readonly, applyRemote, flush, pushCollaborators, onExpired, onGoto, onBackToAula]);
 
   const lastPtr = useRef(0);
   return (
@@ -341,6 +357,19 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
           </span>
           <span className="chip">{readonly ? "sola lettura" : participant ? "modifica i propri oggetti" : "può modificare tutto"}</span>
           <span className="board-user">{session.name}</span>
+          {where && where.n !== null && <span className="chip chip-room">Stanza {where.n}</span>}
+          {session.role === "editor" && (
+            <>
+              <button className="chip chip-btn" onClick={() => setPanel(panel === "stanze" ? null : "stanze")}>
+                Stanze
+              </button>
+              {where && where.n === null && (
+                <button className="chip chip-btn" onClick={() => setPanel(panel === "invita" ? null : "invita")}>
+                  Invita
+                </button>
+              )}
+            </>
+          )}
           {onLogout && (
             <button className="chip chip-btn" onClick={onLogout} title="Esci e cancella i dati ricordati su questo dispositivo">
               Esci
@@ -376,6 +405,10 @@ export function Board({ session, onExpired, onLogout }: BoardProps) {
             send({ t: "ptr", x: p.pointer.x, y: p.pointer.y, tool: p.pointer.tool, button: p.button, sel: Object.keys(apiRef.current?.getAppState().selectedElementIds || {}) });
           }}
         />
+        {panel === "stanze" && (
+          <Rooms presence={presence} aula={where?.aula ?? session.room} here={session.room} error={roomsErr} send={send} clearError={() => setRoomsErr(null)} onClose={() => setPanel(null)} />
+        )}
+        {panel === "invita" && <Invite room={session.room} token={session.token} onClose={() => setPanel(null)} />}
         {votesActive && <VoteLayer notes={voteView.notes} view={voteView.view} votes={votes} myVotes={myVotes} canVote={!readonly} send={send} />}
         {!readonly && api && (
           <div className="board-palette" role="toolbar" aria-label="Note e frame">

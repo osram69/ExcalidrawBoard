@@ -47,7 +47,6 @@ test("presenza: nessuna presenza per chi non è collegato all'aula e un corso no
 });
 
 // --- timer unico per corso ---
-import path from "node:path";
 import { writeCourse, writeParent } from "./course-data.ts";
 import { roomDir } from "./rooms.ts";
 
@@ -58,7 +57,6 @@ function seedCourse(aula: string, members: Record<number, string[]>, open = true
   for (const r of rooms) writeParent(roomDir(srv.dataDir, r.id), { aula, round: 1, n: r.n });
   return rooms.map((r) => r.id);
 }
-void path;
 
 test("timer: avviato dall'aula arriva alle stanze e viceversa; chi entra dopo trova lo stato", async () => {
   const aula = "tim1";

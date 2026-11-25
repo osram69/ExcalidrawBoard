@@ -102,6 +102,26 @@ npm.cmd run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" -
 - **Orologio:** scadenze e data di fine usano l'orologio del Raspberry: tienilo sincronizzato (NTP, attivo di default su Raspberry Pi OS).
 - **Se l'accesso è scaduto** la board lo riconosce subito e riporta al login con un messaggio chiaro, invece di restare "offline".
 
+## Aula e stanze dal vivo (come le stanze di Zoom o di Miro)
+
+Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanze e gli allievi vengono portati dentro da soli. Non servono link nuovi né password in più.
+
+1. **Prepara l'aula.** Apri la board con il tuo link da trainer (`npm run token -- <aula> "Trainer" editor 12 <indirizzo> trainer`), disegna il materiale e premi **Invita** in alto: trovi il link da dare agli allievi
+   (lo stesso per tutti), e imposti la **password della sessione** e, se vuoi, l'ultimo giorno. Il nome dell'aula può avere al massimo 50 caratteri se userai le stanze.
+2. **Gli allievi entrano** dal link con nome, cognome, email e password (vedi "Accesso degli allievi"). Con il pulsante **Stanze** vedi chi è collegato e dove si trova (aula o stanza); i cursori hanno il nome accanto.
+3. **Crea le stanze:** in **Stanze → Crea stanze** scegli quante (da 2 a 12) e assegni ogni allievo a mano, oppure premi **Distribuisci a caso**; poi **Crea e sposta**. Ogni stanza è una board nuova con **una copia di quello che hai
+   disegnato in aula in quel momento** (gli oggetti restano tuoi: gli allievi non li spostano, aggiungono i propri) e gli assegnati vengono portati dentro automaticamente. Accanto al nome compare "Stanza n". Chi non assegni resta in aula.
+4. **Il timer è unico per tutto il corso:** lo avvii dall'aula o da una stanza e parte per tutti (aula e stanze), con le stesse pause.
+5. **Durante il turno:** puoi **Entrare** in una stanza e tornare in aula con **← Torna in aula**, **spostare** un allievo in un'altra stanza (anche uno rimasto in aula) dal menu accanto al suo nome. Chi ricarica la pagina o rientra dal link dell'aula
+   **torna nella sua stanza**. Chi entra dopo la creazione resta in aula finché non lo sposti.
+6. **Chiudi stanze:** tutti tornano in aula. **Le stanze restano salvate** (sono board vere, `<aula>-r<turno>-s<n>`, per esempio `isaqb-dic26-r1-s2`): le riapri da **Turni precedenti → Apri stanza n**, anche per mostrare il lavoro dei gruppi.
+   Gli allievi non possono rientrare in una stanza di un turno chiuso. Per un nuovo giro di stanze basta crearle di nuovo: nasce il turno successivo (`-r2-`).
+
+- **Chi può farlo:** solo chi entra come trainer (`editor`); i controlli sono sul server.
+- **Limiti:** un solo turno aperto alla volta (per rifare le stanze chiudi quello aperto); si assegna chi è collegato in quel momento; ciò che i gruppi aggiungono nelle stanze non viene riportato in aula (restano consultabili);
+  votazioni e note votate restano per board; sul server restano in memoria le board attive, il resto è su disco (`data/rooms/`).
+- **Differenza con `seed`:** `seed` prepara in anticipo una board per gruppo da dare con link; le stanze dal vivo si creano durante la lezione. Si possono usare entrambi.
+
 ## Sul Raspberry (Docker)
 
 Come la variante tldraw: `.env` con `BOARD_SECRET`, `mkdir -p data && sudo chown 1000:1000 data`, `docker compose up -d --build`.

@@ -1,6 +1,7 @@
 // L'accesso arriva in due modi: dal link firmato del trainer (?t=…, tolto subito dall'indirizzo e tenuto nella sessione del browser)
 // oppure dal login con la password di sessione (token ottenuto da /auth/login, ricordato o no secondo "ricordami").
 // Qui si legge solo per mostrare nome e ruolo: i permessi veri li controlla il server.
+import { gotoUrl, saveGotoToken } from "./goto";
 import { clearAccess, loadProfile, readToken, saveLogin, type Profile, type Stores } from "./remember";
 
 export interface BoardSession {
@@ -79,6 +80,12 @@ export function acceptLogin(room: string, token: string, profile: Profile): Boar
 /** Toglie l'accesso a questa board; con `forget` ("Esci") anche nome, cognome ed email ricordati. */
 export function dropSession(room: string, forget: boolean): void {
   clearAccess(stores(), room, forget);
+}
+
+/** Il server ci sposta in un'altra board (stanza o aula): si salva il token ricevuto e si apre la nuova pagina. */
+export function moveTo(room: string, token: string): void {
+  saveGotoToken(stores(), room, token);
+  location.assign(gotoUrl(room));
 }
 
 export const savedProfile = (): Profile => loadProfile(stores());

@@ -20,9 +20,14 @@ export interface PresencePerson {
   name: string;
   role: Role;
 }
+export interface PresenceRound {
+  round: number;
+  rooms: { n: number; id: string; members: Member[] }[];
+}
 export interface Presence {
   rooms: Record<string, PresencePerson[]>;
-  current: { round: number; rooms: { n: number; id: string; members: Member[] }[] } | null;
+  current: PresenceRound | null; // turno aperto
+  history: PresenceRound[]; // turni chiusi (il trainer può riaprirne le stanze)
 }
 export interface Where {
   aula: string;
@@ -63,8 +68,9 @@ export class Course {
   presence(): Presence {
     const rooms: Record<string, PresencePerson[]> = {};
     for (const r of this.loaded()) rooms[r.id] = [...r.peers].map((p) => ({ key: p.key, name: p.name, role: p.role }));
+    const view = (r: Round): PresenceRound => ({ round: r.round, rooms: r.rooms.map((x) => ({ n: x.n, id: x.id, members: x.members })) });
     const open = this.data.rounds.find((r) => r.open);
-    return { rooms, current: open ? { round: open.round, rooms: open.rooms.map((x) => ({ n: x.n, id: x.id, members: x.members })) } : null };
+    return { rooms, current: open ? view(open) : null, history: this.data.rounds.filter((r) => !r.open).map(view) };
   }
 
   /** Manda l'elenco dei collegati ai trainer di tutte le board del corso (gli allievi non lo ricevono). */
