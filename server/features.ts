@@ -29,7 +29,8 @@ export function handleFeatureMessage(r: Room, peer: Peer, msg: unknown): boolean
   if (!isObj(msg)) return false;
   if (msg.t === "timer") {
     if (peer.role === "editor" && r.timer.apply(msg.action, msg.seconds)) {
-      r.broadcast({ t: "timer", state: r.timer.state, now: Date.now() });
+      // il timer è unico per tutto il corso: lo stato arriva a tutte le board (aula e stanze); una board senza corso lo manda solo a sé
+      (r.course ?? r).broadcast({ t: "timer", state: r.timer.state, now: Date.now() });
     }
     return true;
   }

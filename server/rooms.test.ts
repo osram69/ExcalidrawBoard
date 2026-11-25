@@ -45,3 +45,57 @@ test("presenza: nessuna presenza per chi non è collegato all'aula e un corso no
   await t1.close();
   await t2.close();
 });
+
+// --- timer unico per corso ---
+import path from "node:path";
+import { writeCourse, writeParent } from "./course-data.ts";
+import { roomDir } from "./rooms.ts";
+
+/** Prepara su disco un corso con un turno aperto, come lo lascerebbe "Crea stanze" (da fare prima del primo collegamento). */
+function seedCourse(aula: string, members: Record<number, string[]>, open = true) {
+  const rooms = Object.entries(members).map(([n, keys]) => ({ n: Number(n), id: `${aula}-r1-s${n}`, members: keys.map((key) => ({ key, name: key })) }));
+  writeCourse(roomDir(srv.dataDir, aula), { round: 1, rounds: [{ round: 1, open, createdAt: 1, rooms }] });
+  for (const r of rooms) writeParent(roomDir(srv.dataDir, r.id), { aula, round: 1, n: r.n });
+  return rooms.map((r) => r.id);
+}
+void path;
+
+test("timer: avviato dall'aula arriva alle stanze e viceversa; chi entra dopo trova lo stato", async () => {
+  const aula = "tim1";
+  const [s1, s2] = seedCourse(aula, { 1: ["anna"], 2: ["bruno"] });
+  const t = await connect(srv.url, aula, trainer(aula));
+  const sara = await connect(srv.url, aula, student(aula, "sara"));
+  const anna = await connect(srv.url, s1, student(s1, "anna"));
+  const bruno = await connect(srv.url, s2, student(s2, "bruno"));
+  t.send({ t: "timer", action: "start", seconds: 60 });
+  for (const c of [t, sara, anna, bruno]) {
+    const m = await c.waitFor((x) => x.t === "timer");
+    assert.equal(m.state.status, "running");
+  }
+  // il trainer, da una stanza, ferma tutto
+  const t2 = await connect(srv.url, s1, trainer(s1));
+  t2.send({ t: "timer", action: "reset" });
+  for (const c of [t, sara, anna, bruno]) await c.waitFor((x) => x.t === "timer" && x.state.status === "idle");
+  t.send({ t: "timer", action: "start", seconds: 120 });
+  await bruno.waitFor((x) => x.t === "timer" && x.state.status === "running" && x.state.durationMs === 120_000);
+  const late = await connect(srv.url, aula, student(aula, "tardi"));
+  assert.equal(late.init.timer.state.status, "running");
+  assert.equal(late.init.timer.state.durationMs, 120_000);
+  for (const c of [t, t2, sara, anna, bruno, late]) await c.close();
+});
+
+test("timer: un allievo non lo controlla e un altro corso non lo riceve", async () => {
+  const aula = "tim2";
+  const [s1] = seedCourse(aula, { 1: ["anna"] });
+  const t = await connect(srv.url, aula, trainer(aula));
+  const anna = await connect(srv.url, s1, student(s1, "anna"));
+  const altro = await connect(srv.url, "tim3", trainer("tim3"));
+  anna.send({ t: "timer", action: "start", seconds: 60 });
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(t.msgs.some((x) => x.t === "timer"), false);
+  t.send({ t: "timer", action: "start", seconds: 60 });
+  await anna.waitFor((x) => x.t === "timer");
+  await new Promise((r) => setTimeout(r, 300));
+  assert.equal(altro.msgs.some((x) => x.t === "timer"), false, "un altro corso non riceve il timer");
+  for (const c of [t, anna, altro]) await c.close();
+});
