@@ -29,6 +29,8 @@ export interface Peer {
 }
 
 const ID = /^[\w-]{1,100}$/;
+// id che sono chiavi di prototipo: passano la regex ma romperebbero chi usa gli id come chiavi di oggetti (client compreso)
+const RESERVED_IDS = new Set(["__proto__", "constructor", "prototype"]);
 const MAX_EL_JSON = 2 * 1024 * 1024; // un singolo elemento (i disegni a mano libera hanno molti punti)
 export const MAX_FILE = 10 * 1024 * 1024; // una singola immagine (dataURL)
 const IMG = /^data:image\/(png|jpeg|gif|webp);base64,[A-Za-z0-9+/=]+$/; // niente SVG: nessun contenuto attivo
@@ -64,7 +66,7 @@ export class Room {
     });
     try {
       const j = JSON.parse(fs.readFileSync(path.join(dir, "scene.json"), "utf8"));
-      for (const e of j.elements || []) if (e && typeof e.id === "string" && wellFormed(e)) this.els.set(e.id, e);
+      for (const e of j.elements || []) if (e && typeof e.id === "string" && !RESERVED_IDS.has(e.id) && wellFormed(e)) this.els.set(e.id, e);
     } catch {
       /* board nuova */
     }
@@ -89,7 +91,7 @@ export class Room {
     const denied: El[] = [];
     if (!Array.isArray(list)) return { accepted, denied };
     for (const e of list.slice(0, 5000) as El[]) {
-      if (!e || typeof e.id !== "string" || !ID.test(e.id) || !Number.isFinite(e.version) || !Number.isFinite(e.versionNonce)) continue;
+      if (!e || typeof e.id !== "string" || !ID.test(e.id) || RESERVED_IDS.has(e.id) || !Number.isFinite(e.version) || !Number.isFinite(e.versionNonce)) continue;
       if (!wellFormed(e) || JSON.stringify(e).length > MAX_EL_JSON) continue;
       const old = this.els.get(e.id);
       const oldOwner = (old?.customData as { owner?: string } | undefined)?.owner;
@@ -127,6 +129,7 @@ export class Room {
   }
 
   flush() {
+    this.votes.flush();
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = null;
     try {

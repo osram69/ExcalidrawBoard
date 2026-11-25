@@ -24,6 +24,8 @@ export class RoomVotes {
   private open = false;
   private perPerson = DEFAULT_PER_PERSON;
   private votes = new Map<string, Map<string, number>>(); // chiave utente -> (id nota -> n)
+  private dirty = false;
+  private timer: NodeJS.Timeout | null = null;
 
   constructor(private file: string, private isVotable: (id: string) => boolean) {
     try {
@@ -99,7 +101,35 @@ export class RoomVotes {
     return true;
   }
 
+  /** Toglie per sempre i voti su note non più votabili (cancellate o non più note): così annullare una cancellazione non riporta in vita voti già "restituiti". */
+  prune(): boolean {
+    let changed = false;
+    for (const [key, m] of this.votes) {
+      for (const id of [...m.keys()]) {
+        if (!this.isVotable(id)) {
+          m.delete(id);
+          changed = true;
+        }
+      }
+      if (!m.size) this.votes.delete(key);
+    }
+    if (changed) this.save();
+    return changed;
+  }
+
+  /** Il salvataggio è rimandato di 1 s (come la scena): molti voti in fila fanno una sola scrittura. */
   private save() {
+    this.dirty = true;
+    this.timer ??= setTimeout(() => this.flush(), 1000);
+    this.timer.unref();
+  }
+
+  /** Scrive subito, se c'è qualcosa da scrivere (chiamato anche alla chiusura della stanza e allo spegnimento del server). */
+  flush() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    if (!this.dirty) return;
+    this.dirty = false;
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = `${this.file}.${process.pid}.part`;

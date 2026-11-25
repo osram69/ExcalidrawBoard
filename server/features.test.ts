@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import type { Role } from "./auth.ts";
-import { handleFeatureMessage, featureSnapshot } from "./features.ts";
+import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { Room, type Peer } from "./rooms.ts";
 
 /** Stanza con una cartella temporanea e peer finti che registrano ciò che ricevono. */
@@ -130,4 +130,52 @@ test("featureSnapshot include voti e voti miei", () => {
   const snap = featureSnapshot(room, peers[1].peer) as any;
   assert.deepEqual(snap.votes, { open: true, perPerson: 4, totals: { n1: 1 } });
   assert.deepEqual(snap.myVotes, { mine: { n1: 1 }, left: 3 });
+});
+
+test("nota cancellata: onElementsChanged ritrasmette totali e puntini residui", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 3 });
+  for (let i = 0; i < 3; i++) handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "n1", delta: 1 });
+  peers.forEach(({ got }) => (got.length = 0));
+  (room.els.get("n1") as any).isDeleted = true;
+  onElementsChanged(room);
+  for (const { got } of peers) assert.deepEqual(got.find((m) => m.t === "votes").totals, {});
+  assert.deepEqual(peers[1].got.find((m) => m.t === "my-votes"), { t: "my-votes", mine: {}, left: 3 });
+  peers.forEach(({ got }) => (got.length = 0));
+  onElementsChanged(room); // nulla è cambiato: nessun messaggio
+  assert.equal(peers.every(({ got }) => got.length === 0), true);
+});
+
+test("elimina e annulla non raddoppia il budget (end to end)", () => {
+  const { room, peers } = setup(["editor", "participant"]);
+  addNote(room, "A");
+  addNote(room, "B");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 3 });
+  for (let i = 0; i < 3; i++) handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "A", delta: 1 });
+  (room.els.get("A") as any).isDeleted = true;
+  onElementsChanged(room);
+  for (let i = 0; i < 3; i++) handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "B", delta: 1 });
+  (room.els.get("A") as any).isDeleted = false;
+  onElementsChanged(room);
+  assert.deepEqual(room.votes.publicState().totals, { B: 3 });
+  assert.equal(room.votes.mine("u1").left, 0);
+});
+
+test("un voto aggiorna my-votes in tutte le schede con la stessa chiave utente", () => {
+  const { room, peers } = setup(["editor", "participant", "participant"]);
+  (peers[2].peer as any).key = "u1"; // stessa persona su un secondo dispositivo
+  addNote(room, "n1");
+  handleFeatureMessage(room, peers[0].peer, { t: "vote-ctl", action: "open", perPerson: 3 });
+  peers.forEach(({ got }) => (got.length = 0));
+  handleFeatureMessage(room, peers[1].peer, { t: "vote", id: "n1", delta: 1 });
+  for (const i of [1, 2]) assert.deepEqual(peers[i].got.find((m) => m.t === "my-votes"), { t: "my-votes", mine: { n1: 1 }, left: 2 });
+  assert.equal(peers[0].got.some((m) => m.t === "my-votes"), false);
+});
+
+test("id elemento che sono chiavi di prototipo vengono rifiutati dal server", () => {
+  const { room } = setup(["participant"]);
+  const el = (id: string) => ({ id, version: 1, versionNonce: 1, type: "rectangle", x: 0, y: 0, width: 10, height: 10, strokeColor: "#000", backgroundColor: "#fff" });
+  const { accepted } = room.applyElements([el("__proto__"), el("constructor"), el("prototype"), el("ok-1")], { key: "u0", role: "participant" });
+  assert.deepEqual(accepted.map((e) => e.id), ["ok-1"]);
 });

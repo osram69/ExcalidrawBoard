@@ -11,6 +11,18 @@ const sendTo = (peer: Peer, msg: unknown) => {
 
 const sendMine = (r: Room, peer: Peer) => sendTo(peer, { t: "my-votes", ...r.votes.mine(peer.key) });
 
+/** I voti sono della persona (chiave utente), non della scheda: si aggiornano tutte le schede con la stessa chiave. */
+const sendMineToSameUser = (r: Room, key: string) => {
+  for (const p of r.peers) if (p.key === key) sendMine(r, p);
+};
+
+/** Da chiamare dopo che degli elementi sono stati accettati: se una nota non è più votabile i suoi voti decadono e tutti vedono i nuovi conteggi. */
+export function onElementsChanged(r: Room): void {
+  if (!r.votes.prune()) return;
+  r.broadcast({ t: "votes", ...r.votes.publicState() });
+  for (const p of r.peers) sendMine(r, p);
+}
+
 /** `true` se il messaggio era di questa funzione (anche se scartato), così il chiamante non lo tratta altrove. */
 export function handleFeatureMessage(r: Room, peer: Peer, msg: unknown): boolean {
   if (!isObj(msg)) return false;
@@ -30,7 +42,7 @@ export function handleFeatureMessage(r: Room, peer: Peer, msg: unknown): boolean
   if (msg.t === "vote") {
     if ((peer.role === "editor" || peer.role === "participant") && r.votes.vote(peer.key, msg.id, msg.delta)) {
       r.broadcast({ t: "votes", ...r.votes.publicState() });
-      sendMine(r, peer);
+      sendMineToSameUser(r, peer.key);
     }
     return true;
   }

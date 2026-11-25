@@ -8,7 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { WebSocketServer } from "ws";
 import { ROOM_ID, verifyToken } from "./auth.ts";
-import { featureSnapshot, handleFeatureMessage } from "./features.ts";
+import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
 
 try {
@@ -120,7 +120,10 @@ server.on("upgrade", (req, socket, head) => {
       if (peer.role === "viewer") return; // sola lettura: i viewer non scrivono, qualunque cosa mandino
       if (msg?.t === "els") {
         const { accepted, denied } = r.applyElements(msg.els, peer);
-        if (accepted.length) r.broadcast({ t: "els", els: accepted }, peer);
+        if (accepted.length) {
+          r.broadcast({ t: "els", els: accepted }, peer);
+          onElementsChanged(r); // una nota cancellata fa decadere i suoi voti
+        }
         // oggetti altrui: il client li riporta allo stato del server
         if (denied.length) ws.send(JSON.stringify({ t: "deny", els: denied }));
       } else if (msg?.t === "files") {

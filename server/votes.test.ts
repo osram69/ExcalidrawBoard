@@ -138,6 +138,7 @@ test("lo stato sopravvive a un riavvio (stesso file)", () => {
   votes.control("open", 4);
   votes.vote("u1", "n1", 1);
   votes.vote("u2", "n1", 1);
+  votes.flush();
   const again = new RoomVotes(file, (id) => votable.has(id));
   assert.deepEqual(again.publicState(), { open: true, perPerson: 4, totals: { n1: 2 } });
   assert.deepEqual(again.mine("u1"), { mine: { n1: 1 }, left: 3 });
@@ -148,4 +149,33 @@ test("file di stato corrotto: si riparte da zero senza errori", () => {
   fs.writeFileSync(file, "{non json");
   const votes = new RoomVotes(file, (id) => votable.has(id));
   assert.deepEqual(votes.publicState(), { open: false, perPerson: 5, totals: {} });
+});
+
+test("prune: i voti su una nota non più votabile spariscono per sempre (niente budget raddoppiato con elimina e annulla)", () => {
+  const { votes, votable } = make();
+  votes.control("open", 3);
+  for (let i = 0; i < 3; i++) votes.vote("u1", "n1", 1);
+  votable.delete("n1"); // nota cancellata
+  assert.equal(votes.prune(), true);
+  for (let i = 0; i < 3; i++) assert.equal(votes.vote("u1", "n2", 1), true);
+  votable.add("n1"); // annulla: la nota torna
+  assert.deepEqual(votes.publicState().totals, { n2: 3 });
+  assert.deepEqual(votes.mine("u1"), { mine: { n2: 3 }, left: 0 });
+});
+
+test("prune: false se non c'è nulla da togliere", () => {
+  const { votes } = make();
+  votes.control("open", 3);
+  votes.vote("u1", "n1", 1);
+  assert.equal(votes.prune(), false);
+  assert.deepEqual(votes.publicState().totals, { n1: 1 });
+});
+
+test("il salvataggio è rimandato: nessuna scrittura per ogni voto, flush() scrive", () => {
+  const { votes, file } = make();
+  votes.control("open", 3);
+  for (let i = 0; i < 3; i++) votes.vote("u1", "n1", 1);
+  assert.equal(fs.existsSync(file), false, "scritto subito: ogni voto farebbe una scrittura sincrona");
+  votes.flush();
+  assert.equal(fs.existsSync(file), true);
 });

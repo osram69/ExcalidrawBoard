@@ -1,4 +1,5 @@
 import type { MyVotes, VotePublic } from "../server/votes.ts";
+import { countOf } from "./voteMath";
 
 export interface NoteBox {
   id: string;
@@ -27,8 +28,8 @@ export function VoteLayer({ notes, view, votes, myVotes, canVote, send }: LayerP
   return (
     <div className="vote-layer" aria-hidden={false}>
       {notes.map((n) => {
-        const total = votes.totals[n.id] ?? 0;
-        const mine = myVotes.mine[n.id] ?? 0;
+        const total = countOf(votes.totals, n.id);
+        const mine = countOf(myVotes.mine, n.id);
         const interactive = votes.open && canVote;
         if (!total && !interactive) return null;
         const left = (n.x + n.width + view.scrollX) * view.zoom;
