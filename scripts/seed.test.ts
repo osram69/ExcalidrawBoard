@@ -207,3 +207,14 @@ test("board di origine che coincide con una destinazione: errore", async () => {
   assert.match(text, /coincide/);
   assert.equal(roomDirs().filter((d) => d.startsWith("corso8-")).length, 0);
 });
+
+test("errore a metà: si dice quali board erano già state preparate", async () => {
+  const out: string[] = [];
+  const flaky: typeof connectBoard = (s, r, t, ms) => (r.endsWith("-g2") ? Promise.reject(new Error("rete caduta")) : connectBoard(s, r, t, ms));
+  const code = await main(["corso9", "3", pngFile("ok9.png"), "--server", url], env, (l) => out.push(l), flaky);
+  const text = out.join("\n");
+  assert.equal(code, 1);
+  assert.ok(text.includes("rete caduta"), text);
+  assert.ok(text.includes("corso9-g1") && /già preparate/.test(text), text);
+  assert.ok(!text.includes("corso9-g3"), "il gruppo 3 non è stato toccato");
+});

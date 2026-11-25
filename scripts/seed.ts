@@ -140,14 +140,19 @@ async function loadMaterial(args: SeedArgs, readSource: (room: string) => Promis
   return { ...buildImageScene(info, dataURL), descr: `immagine ${path.basename(p)}` };
 }
 
-export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env, out: (line: string) => void = console.log): Promise<number> {
+export async function main(
+  argv: string[],
+  env: NodeJS.ProcessEnv = process.env,
+  out: (line: string) => void = console.log,
+  connect: typeof connectBoard = connectBoard,
+): Promise<number> {
   const args = parseArgs(argv);
   if ("errore" in args) {
     out(args.errore);
     return 1;
   }
   try {
-    await seed(args, secretFor(env), out);
+    await seed(args, secretFor(env), out, connect);
     return 0;
   } catch (e) {
     out(`Errore: ${e instanceof Error ? e.message : String(e)}`);
@@ -155,7 +160,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv = process.env,
   }
 }
 
-async function seed(args: SeedArgs, secret: string, out: (line: string) => void): Promise<void> {
+async function seed(args: SeedArgs, secret: string, out: (line: string) => void, connect: typeof connectBoard): Promise<void> {
   // 1. tutta la validazione prima di toccare il server
   let students: Student[] | undefined;
   if (args.allievi !== undefined) {
@@ -165,29 +170,37 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void)
   }
   const exp = Date.now() + args.ore * 3600e3;
   const material = await loadMaterial(args, (room) =>
-    connectBoard(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret)),
+    connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret)),
   );
   const link = (room: string, name: string, uid: string, role: Role) => `${args.base}/b/${room}?t=${signToken({ room, name, uid, role, exp }, secret)}`;
 
   // 2. una board per gruppo
   const skipped = new Set<number>();
-  for (let g = 1; g <= args.gruppi; g++) {
-    const room = groupRoom(args.corso, g);
-    const conn = await connectBoard(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "editor", exp }, secret));
-    try {
-      if (conn.els.length > 0) {
-        skipped.add(g);
-        continue;
+  const done: string[] = [];
+  try {
+    for (let g = 1; g <= args.gruppi; g++) {
+      const room = groupRoom(args.corso, g);
+      const conn = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "editor", exp }, secret));
+      try {
+        if (conn.els.length > 0) {
+          skipped.add(g);
+          continue;
+        }
+        for (const f of material.files) conn.send({ t: "files", files: [f] }); // un'immagine per messaggio (limite del server)
+        for (const chunk of chunkBySize(material.els)) conn.send({ t: "els", els: chunk });
+      } finally {
+        await conn.close();
       }
-      for (const f of material.files) conn.send({ t: "files", files: [f] }); // un'immagine per messaggio (limite del server)
-      for (const chunk of chunkBySize(material.els)) conn.send({ t: "els", els: chunk });
-    } finally {
-      await conn.close();
+      const check = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0);
+      const got = check.els.length;
+      await check.close();
+      if (got < material.els.length) throw new Error(`La board ${room} non ha ricevuto tutto il materiale (${got} di ${material.els.length} elementi).`);
+      done.push(room);
     }
-    const check = await connectBoard(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0);
-    const got = check.els.length;
-    await check.close();
-    if (got < material.els.length) throw new Error(`La board ${room} non ha ricevuto tutto il materiale (${got} di ${material.els.length} elementi).`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(done.length ? `${msg}
+Board già preparate prima dell'errore: ${done.join(", ")} (rilanciando il comando vengono saltate).` : msg);
   }
 
   // 3. elenco dei link
