@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
 import type { MyVotes, VotePublic } from "../server/votes.ts";
+import { registerLibrary } from "./library";
 import { instantiate, TEMPLATES, type Template } from "./templates";
 import { TimerPill } from "./Timer";
 import { VoteLayer, VotePanel, type NoteBox, type ViewInfo } from "./Votes";
@@ -211,6 +212,12 @@ export function Board({ session }: { session: BoardSession }) {
       }
     }
   };
+
+  // libreria di forme per l'architettura (solo chi può disegnare); gli errori restano in console
+  useEffect(() => {
+    if (!api || readonly) return;
+    registerLibrary(api, (sk) => convertToExcalidrawElements(sk as any) as any[]).catch((e) => console.error("Libreria di forme non caricata:", e));
+  }, [api, readonly]);
 
   // connessione, con riconnessione automatica
   useEffect(() => {

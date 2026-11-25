@@ -1,40 +1,12 @@
 // Template di board: dati puri (skeleton per `convertToExcalidrawElements`), senza importare Excalidraw, così si provano in Node.
 // Ogni template è racchiuso in un frame con il suo nome e centrato sull'origine. Solo tipi di elemento ammessi dal server.
-type Sk = any;
+import { box, type Sk } from "./skeleton";
 
 export interface Template {
   id: string;
   name: string;
   build(): Sk[];
 }
-
-interface BoxOpts {
-  stroke?: string;
-  labelColor?: string;
-  font?: number;
-  align?: "left" | "center";
-  valign?: "top" | "middle";
-  dashed?: boolean;
-  round?: boolean;
-  extra?: Record<string, unknown>;
-}
-
-const box = (id: string, text: string, x: number, y: number, width: number, height: number, bg = "#ffffff", o: BoxOpts = {}): Sk => ({
-  type: "rectangle",
-  id,
-  x,
-  y,
-  width,
-  height,
-  backgroundColor: bg,
-  fillStyle: "solid",
-  strokeColor: o.stroke ?? "#1e1e1e",
-  strokeStyle: o.dashed ? "dashed" : "solid",
-  roughness: 0,
-  roundness: o.round ? { type: 3 } : null,
-  ...(text ? { label: { text, fontSize: o.font ?? 18, strokeColor: o.labelColor ?? "#1e1e1e", textAlign: o.align ?? "center", verticalAlign: o.valign ?? "middle" } } : {}),
-  ...(o.extra ?? {}),
-});
 
 /** Nota adesiva (come quelle della barra): votabile e da riempire. */
 const note = (id: string, x: number, y: number, bg = "#ffec99"): Sk =>
