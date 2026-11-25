@@ -7,6 +7,12 @@ const ALLOWED = new Set(["rectangle", "diamond", "ellipse", "arrow", "line", "fr
 const CATEGORIES = ["UML ·", "Relazione ·", "C4 ·", "Infrastruttura ·", "Servizi ·", "arc42 ·"];
 
 const EXPECTED_UML = ["componente", "interfaccia-fornita", "interfaccia-richiesta", "porta", "classe", "interfaccia-stereotipo", "package", "nota", "attore", "caso-uso", "lifeline", "stato", "stato-iniziale", "stato-finale", "decisione", "fork-join"];
+const EXPECTED_OTHER = {
+  c4: ["persona", "sistema", "sistema-esterno", "container", "componente"],
+  infra: ["nodo", "ambiente-esecuzione", "container-docker", "cloud", "database", "coda", "cache", "storage-file", "api-gateway", "load-balancer", "browser", "mobile"],
+  svc: ["microservizio", "servizio-esterno", "event-bus", "job-batch"],
+  arc: ["blocco-scatola-nera", "blocco-scatola-bianca", "stakeholder", "scenario-qualita", "rischio", "concetto-trasversale"],
+};
 const EXPECTED_REL = ["dipendenza", "realizzazione", "generalizzazione", "associazione", "aggregazione", "composizione"];
 
 test("id unici e con prefisso lib-", () => {
@@ -41,10 +47,11 @@ test("le forme composte condividono un groupId, quelle semplici no", () => {
   }
 });
 
-test("forme UML e relazioni attese presenti", () => {
+test("forme di tutte le categorie presenti", () => {
   const ids = new Set(LIBRARY.map((e) => e.id));
   for (const n of EXPECTED_UML) assert.ok(ids.has(`lib-uml-${n}`), `lib-uml-${n}`);
   for (const n of EXPECTED_REL) assert.ok(ids.has(`lib-rel-${n}`), `lib-rel-${n}`);
+  for (const [cat, list] of Object.entries(EXPECTED_OTHER)) for (const n of list) assert.ok(ids.has(`lib-${cat}-${n}`), `lib-${cat}-${n}`);
 });
 
 test("relazioni UML: punte e tratteggio previsti", () => {
@@ -69,6 +76,6 @@ test("registerLibrary sostituisce solo le proprie voci e mantiene quelle di altr
   assert.ok(next.slice(2).every((i: any) => i.id.startsWith("lib-") && i.name && i.elements.every((e: any) => e.converted)));
 });
 
-test("la libreria completa ha almeno 40 forme", { todo: "si completa nel Task 7" }, () => {
+test("la libreria completa ha almeno 40 forme", () => {
   assert.ok(LIBRARY.length >= 40, `${LIBRARY.length}`);
 });

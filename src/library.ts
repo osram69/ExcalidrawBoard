@@ -87,7 +87,93 @@ const relations: LibraryEntry[] = [
   entry("rel", "composizione", "Composizione", [rel({ startArrowhead: "diamond" })]),
 ];
 
-export const LIBRARY: LibraryEntry[] = [...uml, ...relations];
+// --- C4 (colori del modello C4) ---
+const c4Box = (label: string, bg: string, o: { labelColor?: string; dashed?: boolean } = {}): Sk =>
+  box(undefined, label, 0, 0, 280, 140, bg, { labelColor: o.labelColor ?? "#ffffff", round: true, dashed: o.dashed, stroke: bg === "#85bbf0" ? "#5d9bd1" : "#1e1e1e" });
+const c4: LibraryEntry[] = [
+  entry("c4", "persona", "Persona", [ellipse(50, 0, 60, 60, "#08427b"), box(undefined, "Persona\n[Persona]\nDescrizione", 0, 66, 160, 100, "#08427b", { labelColor: "#ffffff", round: true, font: 16 })]),
+  entry("c4", "sistema", "Sistema", [c4Box("Sistema\n[Sistema software]\nDescrizione", "#1168bd")]),
+  entry("c4", "sistema-esterno", "Sistema esterno", [c4Box("Sistema esterno\n[Sistema software]\nDescrizione", "#999999", { dashed: true })]),
+  entry("c4", "container", "Container", [c4Box("Container\n[Tecnologia]\nDescrizione", "#438dd5")]),
+  entry("c4", "componente", "Componente", [c4Box("Componente\n[Tecnologia]\nDescrizione", "#85bbf0", { labelColor: "#1e1e1e" })]),
+];
+
+// --- infrastruttura e distribuzione ---
+const infra: LibraryEntry[] = [
+  entry("infra", "nodo", "Nodo / server (3D)", [
+    box(undefined, "«device»\nNodo", 0, 24, 200, 116),
+    line(0, 24, [[0, 0], [24, -24], [224, -24], [200, 0]]),
+    line(200, 24, [[0, 0], [24, -24], [24, 92], [0, 116]]),
+  ]),
+  entry("infra", "ambiente-esecuzione", "Ambiente di esecuzione", [box(undefined, "«execution environment»\nRuntime", 0, 0, 240, 140, "#f1f3f5", { valign: "top", font: 16 })]),
+  entry("infra", "container-docker", "Container Docker", [box(undefined, "Container\n[Docker]", 0, 0, 200, 100, "#d0ebff", { stroke: "#1c7ed6", round: true })]),
+  entry("infra", "cloud", "Cloud", [
+    { ...line(0, 0, [[40, 80], [10, 70], [0, 45], [20, 25], [45, 25], [55, 5], [85, -5], [115, 10], [125, 30], [155, 30], [175, 50], [165, 75], [140, 80], [40, 80]], { round: true }), backgroundColor: "#e7f5ff" },
+    text("Cloud", 62, 34, 18),
+  ]),
+  entry("infra", "database", "Database", [
+    ellipse(0, 100, 140, 30),
+    box(undefined, "", 0, 15, 140, 100, "#ffffff", { stroke: "transparent" }),
+    line(0, 15, [[0, 0], [0, 100]]),
+    line(140, 15, [[0, 0], [0, 100]]),
+    ellipse(0, 0, 140, 30),
+    text("Database", 28, 62, 18),
+  ]),
+  entry("infra", "coda", "Coda / broker", [
+    box(undefined, "", 0, 0, 200, 56),
+    line(50, 0, [[0, 0], [0, 56]]),
+    line(100, 0, [[0, 0], [0, 56]]),
+    line(150, 0, [[0, 0], [0, 56]]),
+    text("Coda / broker", 40, -26, 16),
+  ]),
+  entry("infra", "cache", "Cache", [box(undefined, "Cache", 0, 0, 130, 70, "#fff3bf", { round: true, dashed: true })]),
+  entry("infra", "storage-file", "Storage di file", [box(undefined, "", 0, 0, 60, 18), box(undefined, "Storage\n(file)", 0, 18, 160, 92, "#fff9db", { font: 16 })]),
+  entry("infra", "api-gateway", "API gateway", [box(undefined, "API\ngateway", 0, 0, 160, 90, "#e5dbff", { round: true })]),
+  entry("infra", "load-balancer", "Load balancer", [diamond(0, 0, 150, 100, "#d3f9d8", "Load\nbalancer")]),
+  entry("infra", "browser", "Browser / utente", [
+    box(undefined, "", 0, 0, 220, 150),
+    box(undefined, "", 0, 0, 220, 28, "#e9ecef"),
+    ellipse(10, 9, 10, 10, "#fa5252"),
+    ellipse(26, 9, 10, 10, "#fab005"),
+    ellipse(42, 9, 10, 10, "#40c057"),
+    text("Browser", 80, 62, 20),
+  ]),
+  entry("infra", "mobile", "Dispositivo mobile", [box(undefined, "", 0, 0, 86, 160, "#ffffff", { round: true }), box(undefined, "", 8, 20, 70, 108, "#e7f5ff"), ellipse(37, 136, 12, 12), text("Mobile", 12, 168)]),
+];
+
+// --- servizi e integrazione ---
+const services: LibraryEntry[] = [
+  entry("svc", "microservizio", "Microservizio (esagono)", [
+    { ...line(0, 0, [[40, 0], [120, 0], [160, 45], [120, 90], [40, 90], [0, 45], [40, 0]]), backgroundColor: "#fff" },
+    text("Micro-\nservizio", 40, 26, 18),
+  ]),
+  entry("svc", "servizio-esterno", "Servizio esterno", [box(undefined, "Servizio\nesterno", 0, 0, 180, 90, "#f1f3f5", { round: true, dashed: true })]),
+  entry("svc", "event-bus", "Event bus", [box(undefined, "Event bus", 0, 0, 360, 44, "#ffe8cc", { stroke: "#e8590c" })]),
+  entry("svc", "job-batch", "Job batch", [box(undefined, "Job batch", 0, 0, 180, 70, "#fff4e6"), ellipse(12, 22, 26, 26), line(25, 35, [[0, 0], [0, -8]]), line(25, 35, [[0, 0], [7, 4]])]),
+];
+
+// --- arc42 / iSAQB ---
+const arc: LibraryEntry[] = [
+  entry("arc", "blocco-scatola-nera", "Blocco (scatola nera)", [box(undefined, "Nome del blocco\nResponsabilità", 0, 0, 240, 100, "#ffffff", { font: 16 })]),
+  entry("arc", "blocco-scatola-bianca", "Blocco (scatola bianca)", [
+    box(undefined, "Nome del blocco", 0, 0, 340, 230, "#ffffff", { valign: "top" }),
+    box(undefined, "Blocco 1", 20, 50, 130, 60, "#e7f5ff", { font: 16 }),
+    box(undefined, "Blocco 2", 190, 50, 130, 60, "#e7f5ff", { font: 16 }),
+    box(undefined, "Blocco 3", 105, 140, 130, 60, "#e7f5ff", { font: 16 }),
+  ]),
+  entry("arc", "stakeholder", "Stakeholder", [box(undefined, "Stakeholder\nRuolo · aspettative", 0, 0, 220, 90, "#e7f5ff", { round: true, font: 16 })]),
+  entry("arc", "scenario-qualita", "Scenario di qualità", [
+    box(undefined, "Scenario di qualità", 0, 0, 320, 40, "#d0ebff"),
+    box(undefined, "Stimolo: …", 0, 40, 320, 46, "#ffffff", { align: "left", font: 16 }),
+    box(undefined, "Ambiente: …", 0, 86, 320, 46, "#ffffff", { align: "left", font: 16 }),
+    box(undefined, "Risposta: …", 0, 132, 320, 46, "#ffffff", { align: "left", font: 16 }),
+    box(undefined, "Misura: …", 0, 178, 320, 46, "#ffffff", { align: "left", font: 16 }),
+  ]),
+  entry("arc", "rischio", "Rischio / debito tecnico", [box(undefined, "Rischio / debito tecnico\n…", 0, 0, 230, 110, "#ffc9c9", { stroke: "#e03131", align: "left", valign: "top", font: 16 })]),
+  entry("arc", "concetto-trasversale", "Concetto trasversale", [box(undefined, "Concetto trasversale\n(es. sicurezza, logging)", 0, 0, 270, 90, "#f3d9fa", { round: true, dashed: true, font: 16 })]),
+];
+
+export const LIBRARY: LibraryEntry[] = [...uml, ...relations, ...c4, ...infra, ...services, ...arc];
 
 /**
  * Registra la libreria nel pannello di Excalidraw. Sostituisce solo le proprie voci (id `lib-…`) e lascia intatte quelle
