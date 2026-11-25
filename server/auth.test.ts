@@ -72,3 +72,12 @@ test("l'email firmata nel token viene letta; un'email non valida viene scartata"
   const bad = inspectToken(signToken({ ...payload(), email: "non-una-mail" }, SECRET), "isaqb-dic26-g1", SECRET, NOW);
   assert.equal(bad.ok && "email" in bad.payload, false);
 });
+
+// Vettore di prova del trainer (docs/accesso-cube-academy.md): il sito lo verifica con gli stessi valori.
+test("vettore di prova del trainer: segreto, payload e token attesi", () => {
+  const p: TokenPayload = { room: "lezione1", name: "Patrick Serra", uid: "patrick", role: "editor", exp: 1893456000000 };
+  assert.equal(
+    signToken(p, SECRET),
+    "eyJyb29tIjoibGV6aW9uZTEiLCJuYW1lIjoiUGF0cmljayBTZXJyYSIsInVpZCI6InBhdHJpY2siLCJyb2xlIjoiZWRpdG9yIiwiZXhwIjoxODkzNDU2MDAwMDAwfQ.fAM4baMfsWCi4Lsjdxv3z96Z8lhrbAnH4DXbUXItuh4",
+  );
+});

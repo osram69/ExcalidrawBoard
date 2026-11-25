@@ -57,6 +57,18 @@ export function inspectToken(token: string | null | undefined, room: string, sec
   return { ok: true, payload: p };
 }
 
+/** Indirizzo http(s) completo (per esempio il login del trainer sul sito, `TRAINER_LOGIN_URL`); altrimenti `null`. */
+export function parseHttpUrl(raw: string | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "http:" || u.protocol === "https:" ? v : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Email normalizzata (minuscola, senza spazi) se plausibile e non più lunga di 120 caratteri; altrimenti `null`. */
 export function normalizeEmail(raw: unknown): string | null {
   if (typeof raw !== "string") return null;

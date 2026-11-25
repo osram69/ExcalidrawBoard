@@ -16,6 +16,8 @@ export interface AuthOptions {
   days: number; // durata con "ricordami"
   /** Se la persona non può entrare in quella board (stanza chiusa o non sua), restituisce l'aula a cui tornare. */
   guard?: (room: string, payload: TokenPayload) => { aula: string } | null;
+  /** Login del trainer sul sito Cube Academy (`TRAINER_LOGIN_URL`), se configurato: la pagina di accesso mostra "Accedi come trainer". */
+  trainerLoginUrl?: string | null;
 }
 
 const MAX_BODY = 4096;
@@ -154,6 +156,8 @@ export function createAuthHandler(opts: AuthOptions) {
         return req.method === "POST" ? login(req, res) : fail(res, 405, "Metodo non consentito.");
       case "/auth/access":
         return req.method === "PUT" ? setAccess(req, res, room) : fail(res, 405, "Metodo non consentito.");
+      case "/auth/config":
+        return req.method === "GET" ? json(res, 200, { trainerLoginUrl: opts.trainerLoginUrl ?? null }) : fail(res, 405, "Metodo non consentito.");
       case "/auth/aula":
         return req.method === "GET" ? aulaOfRoom(res, room) : fail(res, 405, "Metodo non consentito.");
       case "/auth/check":

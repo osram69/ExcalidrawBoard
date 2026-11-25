@@ -1,6 +1,7 @@
 import { StrictMode, useCallback, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Board } from "./Board";
+import { Home } from "./Home";
 import { Login } from "./Login";
 import { reasonText } from "./remember";
 import { aulaOf, closedAula, gotoUrl } from "./goto";
@@ -77,6 +78,20 @@ function BoardPage({ room }: { room: string }) {
     };
   }, [state.kind, room]);
 
+  // il pulsante "Accedi come trainer" compare solo se il server ha configurato il login del sito (TRAINER_LOGIN_URL)
+  const [trainerUrl, setTrainerUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (state.kind !== "login") return;
+    let alive = true;
+    fetch("/auth/config")
+      .then((r) => r.json())
+      .then((j) => alive && setTrainerUrl(typeof j?.trainerLoginUrl === "string" ? j.trainerLoginUrl : null))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [state.kind]);
+
   const onGoto = useCallback((to: string, token: string) => moveTo(to, token), []);
   const onBackToAula = useCallback(
     (aula: string) => {
@@ -92,6 +107,7 @@ function BoardPage({ room }: { room: string }) {
       <Login
         room={room}
         reason={state.reason}
+        trainerLoginUrl={trainerUrl}
         onLogin={(token, profile) => {
           const s = acceptLogin(room, token, profile);
           setState(s ? { kind: "board", session: s } : { kind: "login", reason: "L'accesso ricevuto non è valido: riprova." });
@@ -119,14 +135,7 @@ function BoardPage({ room }: { room: string }) {
 
 function Page() {
   const room = roomFromPath();
-  if (!room) {
-    return (
-      <div className="board-msg">
-        <h1>Board Cube Academy</h1>
-        <p>Apri la board dal link che ti ha inviato il tuo trainer.</p>
-      </div>
-    );
-  }
+  if (!room) return <Home />;
   return <BoardPage room={room} />;
 }
 

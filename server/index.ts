@@ -10,7 +10,7 @@ import { WebSocketServer } from "ws";
 import { createAuthHandler } from "./auth-http.ts";
 import { getCourse } from "./course.ts";
 import { routeReturning } from "./rooms-actions.ts";
-import { ROOM_ID, verifyToken } from "./auth.ts";
+import { parseHttpUrl, ROOM_ID, verifyToken } from "./auth.ts";
 import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
 
@@ -64,7 +64,11 @@ function serveFile(res: http.ServerResponse, file: string, cache: string) {
   });
 }
 
+const TRAINER_LOGIN_URL = parseHttpUrl(process.env.TRAINER_LOGIN_URL);
+if (process.env.TRAINER_LOGIN_URL?.trim() && !TRAINER_LOGIN_URL) console.warn("TRAINER_LOGIN_URL non è un indirizzo http(s) completo: il pulsante \"Accedi come trainer\" resta disattivato.");
+
 const handleAuth = createAuthHandler({
+  trainerLoginUrl: TRAINER_LOGIN_URL,
   secret: SECRET,
   dataDir: DATA_DIR,
   // una stanza di un turno chiuso (o non assegnata a questa persona): /auth/check lo dice, così il client torna all'aula

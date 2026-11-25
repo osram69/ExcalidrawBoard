@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { savedProfile } from "./session";
+import { trainerLoginRedirect } from "./trainerLogin";
 
 interface Props {
   room: string;
   reason?: string; // perché si è tornati al login (accesso scaduto, ecc.)
+  trainerLoginUrl?: string | null; // login del trainer sul sito Cube Academy, se configurato
   onLogin: (token: string, profile: { nome: string; cognome: string; email: string; ricordami: boolean }) => void;
 }
 
 /** Pagina di accesso degli allievi: nome, cognome, email e la password della sessione (uguale per tutti). */
-export function Login({ room, reason, onLogin }: Props) {
+export function Login({ room, reason, trainerLoginUrl, onLogin }: Props) {
   const saved = savedProfile();
   const [nome, setNome] = useState(saved.nome);
   const [cognome, setCognome] = useState(saved.cognome);
@@ -83,6 +85,14 @@ export function Login({ room, reason, onLogin }: Props) {
         <button type="submit" disabled={busy}>
           {busy ? "Accesso in corso…" : "Entra nella board"}
         </button>
+        {trainerLoginUrl && (
+          <div className="login-trainer">
+            <span>Sei un trainer?</span>
+            <button type="button" onClick={() => location.assign(trainerLoginRedirect(trainerLoginUrl, room, location.origin))}>
+              Accedi con il tuo account Cube Academy
+            </button>
+          </div>
+        )}
       </form>
     </div>
   );

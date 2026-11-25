@@ -102,6 +102,16 @@ npm.cmd run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" -
 - **Orologio:** scadenze e data di fine usano l'orologio del Raspberry: tienilo sincronizzato (NTP, attivo di default su Raspberry Pi OS).
 - **Se l'accesso è scaduto** la board lo riconosce subito e riporta al login con un messaggio chiaro, invece di restare "offline".
 
+## Accesso del trainer con l'account Cube Academy
+
+I trainer registrati nell'elenco di **/admin/materiali** del sito (ruolo `trainer`) entrano nella board con il loro account e la gestiscono per intero, **senza comandi**: nella pagina di accesso (e nella pagina iniziale, dove si dà un nome a una board nuova)
+c'è il pulsante **"Accedi come trainer"**. Porta al login di `/materiali` sul sito e, se l'utente è trainer, torna sulla board con tutti i permessi. Gli studenti del sito non diventano trainer; la password non passa dalla board
+(la board non contatta mai il sito né Supabase: lo scambio è solo un reindirizzamento del browser con un token firmato, quindi funziona anche con la board su un Raspberry a casa raggiungibile dal tunnel).
+
+- Si attiva impostando `TRAINER_LOGIN_URL` (indirizzo della rotta del sito, per esempio `https://cubeacademy.eu/materiali/board`); senza, il pulsante non compare e restano i link firmati (`npm run token`).
+- Qualsiasi trainer apre qualsiasi board e ne crea di nuove dandole un nome. Il token dura 12 ore.
+- La parte del sito (rotta `/materiali/board`, `BOARD_SECRET`, `BOARD_URL`) e il formato del token sono descritti in [docs/accesso-cube-academy.md](docs/accesso-cube-academy.md).
+
 ## Aula e stanze dal vivo (come le stanze di Zoom o di Miro)
 
 Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanze e gli allievi vengono portati dentro da soli. Non servono link nuovi né password in più.
