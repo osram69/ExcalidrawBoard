@@ -8,6 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { WebSocketServer } from "ws";
 import { createAuthHandler } from "./auth-http.ts";
+import { getCourse } from "./course.ts";
 import { ROOM_ID, verifyToken } from "./auth.ts";
 import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
@@ -102,20 +103,25 @@ server.on("upgrade", (req, socket, head) => {
   const m = /^\/connect\/([^/]+)$/.exec(url.pathname);
   const room = m ? decodeURIComponent(m[1]) : "";
   const t = verifyToken(url.searchParams.get("t"), SECRET);
-  if (!m || !t || t.room !== room || !ROOM_ID.test(room)) {
+  const key = t ? t.uid || `n:${t.name}` : "";
+  // il token deve essere valido per questa board e, se è una stanza, la persona deve poterci entrare (assegnata in un turno aperto, o trainer)
+  const course = m && t && t.room === room && ROOM_ID.test(room) ? getCourse(DATA_DIR, SECRET, room) : null;
+  if (!m || !t || !course || t.room !== room || !ROOM_ID.test(room) || !course.canEnter(room, { key, role: t.role })) {
     console.warn(`WebSocket rifiutato: ${url.pathname} (token ${t ? "ok" : "non valido"})`);
     socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
     return socket.destroy();
   }
   wss.handleUpgrade(req, socket, head, (ws) => {
     const r = getRoom(DATA_DIR, room);
-    const key = t.uid || `n:${t.name}`;
-    const peer: Peer = { id: crypto.randomUUID(), ws, name: t.name, role: t.role, color: colorFor(key), key };
+    r.course = course; // le board di un corso condividono il timer e la presenza
+    r.timer = course.timer;
+    const peer: Peer = { id: crypto.randomUUID(), ws, name: t.name, role: t.role, color: colorFor(key), key, exp: t.exp, email: t.email };
     const info = (p: Peer) => ({ id: p.id, name: p.name, color: p.color, role: p.role, key: p.key });
     ws.send(JSON.stringify({ t: "init", me: info(peer), els: [...r.els.values()], peers: [...r.peers].map(info), ...featureSnapshot(r, peer) }));
     for (const f of r.files.values()) ws.send(JSON.stringify({ t: "files", files: [f] }));
     r.join(peer);
     r.broadcast({ t: "join", peer: info(peer) }, peer);
+    course.pushPresence(); // il trainer vede subito chi è entrato
     if (process.env.DEBUG_BOARD) console.log(`connesso ${t.name} (${t.role}) a ${room}`);
 
     // alla scadenza del token il collegamento si chiude (codice 4001): il client torna al login
@@ -150,7 +156,10 @@ server.on("upgrade", (req, socket, head) => {
         if (ok.length) r.broadcast({ t: "files", files: ok }, peer);
       }
     });
-    ws.on("close", () => r.leave(peer));
+    ws.on("close", () => {
+      r.leave(peer);
+      course.pushPresence();
+    });
     ws.on("error", (e) => console.error("WebSocket:", e.message));
   });
 });

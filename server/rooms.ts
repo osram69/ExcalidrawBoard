@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { WebSocket } from "ws";
 import type { Role } from "./auth.ts";
+import type { Course } from "./course.ts";
 import { RoomTimer } from "./timer.ts";
 import { RoomVotes } from "./votes.ts";
 
@@ -26,6 +27,8 @@ export interface Peer {
   role: Role;
   color: string;
   key: string; // identità per la proprietà degli oggetti: id utente del token, altrimenti il nome
+  exp: number; // scadenza del token con cui è entrato: serve a emettere i token di spostamento senza allungarla
+  email?: string;
 }
 
 const ID = /^[\w-]{1,100}$/;
@@ -52,7 +55,8 @@ export class Room {
   readonly els = new Map<string, El>();
   readonly files = new Map<string, BinFile>();
   readonly peers = new Set<Peer>();
-  readonly timer = new RoomTimer();
+  timer = new RoomTimer(); // nelle board di un corso è il timer comune del corso (assegnato al collegamento)
+  course: Course | null = null;
   readonly votes: RoomVotes;
   private saveTimer: NodeJS.Timeout | null = null;
   private dirtyFiles = new Set<string>();
@@ -176,6 +180,8 @@ export function getRoom(dataDir: string, id: string): Room {
   }
   return r;
 }
+/** La board se è in memoria (cioè se c'è qualcuno collegato o l'ultimo se n'è andato da poco). */
+export const loadedRoom = (id: string): Room | undefined => rooms.get(id);
 export const openRooms = () => rooms.size;
 export function closeAllRooms() {
   for (const r of rooms.values()) r.flush();

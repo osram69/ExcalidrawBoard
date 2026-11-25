@@ -1,4 +1,5 @@
 // Messaggi dei gadget (timer, votazione): controllo del ruolo e smistamento. Il server è l'unica fonte di verità.
+import type { Where } from "./course.ts";
 import type { Room, Peer } from "./rooms.ts";
 import type { TimerState } from "./timer.ts";
 import type { MyVotes, VotePublic } from "./votes.ts";
@@ -50,6 +51,6 @@ export function handleFeatureMessage(r: Room, peer: Peer, msg: unknown): boolean
 }
 
 /** Stato dei gadget da includere nel messaggio `init` di chi si collega. */
-export function featureSnapshot(r: Room, peer: Peer): { timer: { state: TimerState; now: number }; votes: VotePublic; myVotes: MyVotes } {
-  return { timer: { state: r.timer.state, now: Date.now() }, votes: r.votes.publicState(), myVotes: r.votes.mine(peer.key) };
+export function featureSnapshot(r: Room, peer: Peer): { timer: { state: TimerState; now: number }; votes: VotePublic; myVotes: MyVotes; course: Where | null } {
+  return { timer: { state: r.timer.state, now: Date.now() }, votes: r.votes.publicState(), myVotes: r.votes.mine(peer.key), course: r.course ? r.course.whereIs(r.id) : null };
 }
