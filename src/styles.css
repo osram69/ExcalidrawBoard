@@ -3,7 +3,7 @@
 html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-system, "Segoe UI", Inter, sans-serif; background: var(--paper); color: var(--ink); }
 
 .board-root { position: fixed; inset: 0; display: flex; flex-direction: column; }
-.board-bar { height: 44px; flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 14px; background: var(--ink); color: #fff; z-index: 1; }
+.board-bar { min-height: 44px; flex: none; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 12px; padding: 6px 14px; background: var(--ink); color: #fff; z-index: 1; }
 .board-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .board-brand b { font-size: 15px; }
 .board-brand b span { color: var(--ember); }
@@ -33,8 +33,10 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .pal-frame:hover { border-color: var(--flame); color: var(--flame); }
 .pal-photo { display: inline-block; }
 
-.board-timer { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 10px; padding: 6px 12px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); font-size: 13px; }
-.timer-clock { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 66px; text-align: center; }
+/* timer e votazione stanno nella barra scura in alto, così non coprono mai gli strumenti di disegno di Excalidraw */
+.board-gadgets { display: flex; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px 10px; min-width: 0; }
+.board-timer { display: flex; align-items: center; gap: 10px; padding: 3px 10px; background: #fff; color: var(--ink); border-radius: 10px; font-size: 13px; }
+.timer-clock { font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 66px; text-align: center; }
 .timer-tag { font-size: 12px; color: #666; }
 .timer-controls { display: flex; gap: 6px; }
 .board-timer button { border: 1px solid #ddd; background: #fff; border-radius: 7px; padding: 3px 9px; font: inherit; font-size: 13px; cursor: pointer; }
@@ -51,7 +53,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .vote-badge button:disabled { opacity: 0.35; cursor: default; }
 .vote-count { min-width: 20px; text-align: center; font-weight: 700; font-variant-numeric: tabular-nums; }
 .vote-count.mine { color: var(--flame); }
-.board-votepanel { position: absolute; top: 64px; left: 50%; transform: translateX(-50%); z-index: 5; display: flex; align-items: center; gap: 10px; padding: 5px 12px; background: #fff; border-radius: 12px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); font-size: 13px; }
+.board-votepanel { display: flex; align-items: center; gap: 10px; padding: 3px 10px; background: #fff; color: var(--ink); border-radius: 10px; font-size: 13px; }
 .vote-controls { display: flex; align-items: center; gap: 6px; }
 .vote-budget { display: inline-flex; align-items: center; gap: 5px; color: #666; font-size: 12px; }
 .vote-budget input { width: 48px; font: inherit; padding: 2px 4px; border: 1px solid #ddd; border-radius: 6px; }

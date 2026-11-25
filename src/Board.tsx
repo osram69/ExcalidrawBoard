@@ -306,6 +306,10 @@ export function Board({ session }: { session: BoardSession }) {
           </b>
           <span className="board-room">{session.room}</span>
         </div>
+        <div className="board-gadgets">
+          <TimerPill state={timer.state} offsetMs={timer.offsetMs} canControl={session.role === "editor"} send={send} />
+          <VotePanel votes={votes} myVotes={myVotes} isEditor={session.role === "editor"} canVote={!readonly} send={send} budgetDraft={budgetDraft} setBudgetDraft={setBudgetDraft} />
+        </div>
         <div className="board-meta">
           <span className={`chip ${status === "online" ? "chip-ok" : status === "offline" ? "chip-bad" : "chip-wait"}`}>
             {status === "online" ? "in linea" : status === "offline" ? "offline" : "connessione…"}
@@ -342,9 +346,7 @@ export function Board({ session }: { session: BoardSession }) {
             send({ t: "ptr", x: p.pointer.x, y: p.pointer.y, tool: p.pointer.tool, button: p.button, sel: Object.keys(apiRef.current?.getAppState().selectedElementIds || {}) });
           }}
         />
-        <TimerPill state={timer.state} offsetMs={timer.offsetMs} canControl={session.role === "editor"} send={send} />
         {votesActive && <VoteLayer notes={voteView.notes} view={voteView.view} votes={votes} myVotes={myVotes} canVote={!readonly} send={send} />}
-        <VotePanel votes={votes} myVotes={myVotes} isEditor={session.role === "editor"} canVote={!readonly} send={send} budgetDraft={budgetDraft} setBudgetDraft={setBudgetDraft} />
         {!readonly && api && (
           <div className="board-palette" role="toolbar" aria-label="Note e frame">
             <span className="pal-label">Nota</span>
