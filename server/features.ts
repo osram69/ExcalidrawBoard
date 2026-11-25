@@ -1,5 +1,6 @@
 // Messaggi dei gadget (timer, votazione): controllo del ruolo e smistamento. Il server è l'unica fonte di verità.
 import type { Where } from "./course.ts";
+import { handleRoomsMessage } from "./rooms-actions.ts";
 import type { Room, Peer } from "./rooms.ts";
 import type { TimerState } from "./timer.ts";
 import type { MyVotes, VotePublic } from "./votes.ts";
@@ -41,6 +42,7 @@ export function handleFeatureMessage(r: Room, peer: Peer, msg: unknown): boolean
     }
     return true;
   }
+  if (typeof msg.t === "string" && msg.t.startsWith("rooms-")) return handleRoomsMessage(r, peer, msg);
   if (msg.t === "vote") {
     if ((peer.role === "editor" || peer.role === "participant") && r.votes.vote(peer.key, msg.id, msg.delta)) {
       r.broadcast({ t: "votes", ...r.votes.publicState() });

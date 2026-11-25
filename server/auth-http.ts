@@ -5,7 +5,7 @@
 //   GET  /auth/check?room=<board>         Authorization: Bearer <token>                         -> { ok, name, role, exp }
 import type http from "node:http";
 import path from "node:path";
-import { inspectToken, personalUid, ROOM_ID, signToken } from "./auth.ts";
+import { inspectToken, personalUid, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
 import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess } from "./access.ts";
 
 export interface AuthOptions {
@@ -13,6 +13,8 @@ export interface AuthOptions {
   dataDir: string;
   hours: number; // durata normale dell'accesso
   days: number; // durata con "ricordami"
+  /** Se la persona non può entrare in quella board (stanza chiusa o non sua), restituisce l'aula a cui tornare. */
+  guard?: (room: string, payload: TokenPayload) => { aula: string } | null;
 }
 
 const MAX_BODY = 4096;
@@ -133,6 +135,8 @@ export function createAuthHandler(opts: AuthOptions) {
   function checkToken(req: http.IncomingMessage, res: http.ServerResponse, room: string) {
     const c = ROOM_ID.test(room) ? inspectToken(bearer(req), room, opts.secret) : ({ ok: false, motivo: "non valido" } as const);
     if (!c.ok) return fail(res, 401, c.motivo);
+    const closed = opts.guard?.(room, c.payload);
+    if (closed) return json(res, 401, { ok: false, motivo: "stanza chiusa", aula: closed.aula });
     json(res, 200, { ok: true, name: c.payload.name, role: c.payload.role, exp: c.payload.exp });
   }
 

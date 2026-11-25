@@ -9,6 +9,7 @@ import path from "node:path";
 import { WebSocketServer } from "ws";
 import { createAuthHandler } from "./auth-http.ts";
 import { getCourse } from "./course.ts";
+import { routeReturning } from "./rooms-actions.ts";
 import { ROOM_ID, verifyToken } from "./auth.ts";
 import { featureSnapshot, handleFeatureMessage, onElementsChanged } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
@@ -66,6 +67,11 @@ function serveFile(res: http.ServerResponse, file: string, cache: string) {
 const handleAuth = createAuthHandler({
   secret: SECRET,
   dataDir: DATA_DIR,
+  // una stanza di un turno chiuso (o non assegnata a questa persona): /auth/check lo dice, così il client torna all'aula
+  guard: (room, p) => {
+    const c = getCourse(DATA_DIR, SECRET, room);
+    return c.canEnter(room, { key: p.uid || `n:${p.name}`, role: p.role }) ? null : { aula: c.aula };
+  },
   hours: Number(process.env.LOGIN_TOKEN_HOURS) || 12,
   days: Number(process.env.LOGIN_REMEMBER_DAYS) || 7,
 });
@@ -122,6 +128,7 @@ server.on("upgrade", (req, socket, head) => {
     r.join(peer);
     r.broadcast({ t: "join", peer: info(peer) }, peer);
     course.pushPresence(); // il trainer vede subito chi è entrato
+    routeReturning(r, peer); // chi è assegnato a una stanza aperta ci torna subito
     if (process.env.DEBUG_BOARD) console.log(`connesso ${t.name} (${t.role}) a ${room}`);
 
     // alla scadenza del token il collegamento si chiude (codice 4001): il client torna al login
