@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { TimerState } from "../server/timer.ts";
 import type { BoardSession } from "./session";
 import type { MyVotes, VotePublic } from "../server/votes.ts";
+import { instantiate, TEMPLATES, type Template } from "./templates";
 import { TimerPill } from "./Timer";
 import { VoteLayer, VotePanel, type NoteBox, type ViewInfo } from "./Votes";
 
@@ -30,6 +31,7 @@ export function Board({ session }: { session: BoardSession }) {
   const [myVotes, setMyVotes] = useState<MyVotes>({ mine: {}, left: 0 });
   const [voteView, setVoteView] = useState<{ view: ViewInfo; notes: NoteBox[] }>({ view: { scrollX: 0, scrollY: 0, zoom: 1 }, notes: [] });
   const [budgetDraft, setBudgetDraft] = useState(5);
+  const [tplOpen, setTplOpen] = useState(false);
   const viewRaf = useRef<number | null>(null);
   const viewKey = useRef("");
   const votesActive = votes.open || Object.keys(votes.totals).length > 0;
@@ -163,6 +165,13 @@ export function Board({ session }: { session: BoardSession }) {
         label: { text: "Scrivi qui…", fontSize: 20, strokeColor: "#1e1e1e", textAlign: "center", verticalAlign: "middle" },
       },
     ]);
+  };
+
+  /** Inserisce un template al centro della vista (in un frame col suo nome). */
+  const addTemplate = (t: Template) => {
+    const { x, y } = viewCenter();
+    insert(instantiate(t).map((e) => ({ ...e, x: e.x + x, y: e.y + y })));
+    setTplOpen(false);
   };
 
   const addFrame = () => {
@@ -339,6 +348,20 @@ export function Board({ session }: { session: BoardSession }) {
             <button className="pal-frame" title="Aggiungi un frame (area per raggruppare o presentare)" onClick={addFrame}>
               <span aria-hidden>▭</span> Frame
             </button>
+            <span className="pal-menu">
+              <button className="pal-frame" aria-haspopup="menu" aria-expanded={tplOpen} title="Inserisci un template di board" onClick={() => setTplOpen((o) => !o)}>
+                <span aria-hidden>▤</span> Template
+              </button>
+              {tplOpen && (
+                <div className="tpl-menu" role="menu">
+                  {TEMPLATES.map((t) => (
+                    <button key={t.id} role="menuitem" onClick={() => addTemplate(t)}>
+                      {t.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </span>
             <label className="pal-frame pal-photo" title="Aggiungi una foto dal dispositivo o dalla fotocamera">
               <span aria-hidden>🖼</span> Foto
               <input
