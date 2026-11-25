@@ -11,7 +11,8 @@
     "build": "vite build",
     "start": "tsx server/index.ts",
     "token": "node scripts/make-token.mjs",
-    "test": "node --import tsx --test \"server/**/*.test.ts\" \"src/**/*.test.ts\""
+    "seed": "tsx scripts/seed.ts",
+    "test": "node --import tsx --test \"server/**/*.test.ts\" \"src/**/*.test.ts\" \"scripts/**/*.test.ts\""
   },
   "engines": {
     "node": ">=22"
