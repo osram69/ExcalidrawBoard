@@ -161,3 +161,49 @@ test("board già con contenuto (anche una sola nota) viene saltata", async () =>
   await g1.close();
   await g2.close();
 });
+
+const rect = (id: string, extra: Record<string, unknown> = {}) => ({
+  id, type: "rectangle", x: 10, y: 20, width: 100, height: 50, version: 1, versionNonce: 7, strokeColor: "#000", backgroundColor: "#fff", ...extra,
+});
+
+test("materiale da una board già preparata: copiata in ogni gruppo, origine invariata, allievi senza modifiche", async () => {
+  const src = "lezione1";
+  const t = await connectBoard(url, src, token(src, "editor", "trainer"));
+  t.send({ t: "files", files: [{ id: "f1", mimeType: "image/png", dataURL: "data:image/png;base64,AAAA", created: 1 }] });
+  t.send({ t: "els", els: [rect("a1"), rect("a2", { type: "image", fileId: "f1", status: "saved" }), rect("a3", { isDeleted: true })] });
+  await t.close();
+  const { code, text } = await run(["corso6", "2", `board:${src}`]);
+  assert.equal(code, 0, text);
+  assert.ok(text.includes("board lezione1"));
+  for (const g of [1, 2]) {
+    const room = `corso6-g${g}`;
+    const v = await connectBoard(url, room, token(room, "viewer"));
+    assert.deepEqual(v.els.map((e: any) => e.id).sort(), ["a1", "a2"], "gli elementi cancellati non si copiano");
+    assert.deepEqual(v.files.map((f: any) => f.id), ["f1"]);
+    await v.close();
+  }
+  const orig = await connectBoard(url, src, token(src, "viewer"));
+  assert.equal(orig.els.length, 3, "la board d'origine non deve cambiare");
+  await orig.close();
+  const room = "corso6-g1";
+  const p = await connectBoard(url, room, token(room, "participant", "anna"));
+  const e = p.els.find((x: any) => x.id === "a1");
+  p.send({ t: "els", els: [{ ...e, x: e.x + 300, version: e.version + 1, versionNonce: 1 }] });
+  await new Promise((r) => setTimeout(r, 400));
+  assert.ok(p.received.some((m) => m.t === "deny"), "gli oggetti copiati sono del trainer");
+  await p.close();
+});
+
+test("board di origine vuota o inesistente: errore chiaro, nessuna board del corso", async () => {
+  const { code, text } = await run(["corso7", "2", "board:non-esiste-affatto"]);
+  assert.equal(code, 1);
+  assert.match(text, /vuota o non esiste/);
+  assert.equal(roomDirs().filter((d) => d.startsWith("corso7-")).length, 0);
+});
+
+test("board di origine che coincide con una destinazione: errore", async () => {
+  const { code, text } = await run(["corso8", "2", "board:corso8-g1"]);
+  assert.equal(code, 1);
+  assert.match(text, /coincide/);
+  assert.equal(roomDirs().filter((d) => d.startsWith("corso8-")).length, 0);
+});

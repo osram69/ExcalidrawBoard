@@ -119,8 +119,18 @@ function readFileOrFail(p: string, what: string): Buffer {
   }
 }
 
-async function loadMaterial(args: SeedArgs): Promise<Material> {
-  if (args.materiale.tipo === "board") throw new Error("Il materiale da una board (board:ID) non è ancora disponibile.");
+async function loadMaterial(args: SeedArgs, readSource: (room: string) => Promise<BoardConn>): Promise<Material> {
+  if (args.materiale.tipo === "board") {
+    const id = args.materiale.id;
+    for (let g = 1; g <= args.gruppi; g++) {
+      if (groupRoom(args.corso, g) === id) throw new Error(`La board di origine ${id} coincide con una delle board di destinazione: scegli un altro nome per il corso.`);
+    }
+    const src = await readSource(id); // sola lettura
+    await src.close();
+    const els = src.els.filter((e) => !e.isDeleted);
+    if (!els.length) throw new Error(`La board ${id} è vuota o non esiste.`);
+    return { els, files: src.files, descr: `board ${id}` };
+  }
   const p = args.materiale.percorso;
   const buf = readFileOrFail(p, "il file dell'immagine");
   const info = imageInfo(buf);
@@ -153,8 +163,10 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void)
     if ("errore" in r) throw new Error(r.errore);
     students = r.ok;
   }
-  const material = await loadMaterial(args);
   const exp = Date.now() + args.ore * 3600e3;
+  const material = await loadMaterial(args, (room) =>
+    connectBoard(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret)),
+  );
   const link = (room: string, name: string, uid: string, role: Role) => `${args.base}/b/${room}?t=${signToken({ room, name, uid, role, exp }, secret)}`;
 
   // 2. una board per gruppo

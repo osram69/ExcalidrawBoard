@@ -50,6 +50,26 @@ Apri i due link in due browser. Versione di produzione in locale: `npm run build
 
 Test automatici (timer, votazione, messaggi e ruoli del server, template, libreria): `npm test`.
 
+## Classi di lavoro (una board per gruppo)
+
+Per le esercitazioni a gruppi, `npm run seed` prepara una board per ogni gruppo con lo stesso materiale di partenza e stampa i link:
+
+```powershell
+npm run seed -- isaqb-dic26 4 uml.png --allievi allievi.txt --ore 8
+npm run seed -- isaqb-dic26 3 board:lezione1 --server https://board.esempio.it
+```
+
+- Crea `isaqb-dic26-g1 … -g4` (nome del corso al massimo 60 caratteri; da 1 a 12 gruppi).
+- **Materiale:** un file immagine (PNG, JPEG, WebP, GIF, fino a circa 7 MB) oppure `board:<id>`, che copia una board già preparata sullo stesso server (la board d'origine non cambia, gli elementi cancellati non si copiano).
+  L'immagine entra **bloccata**, ridotta a 1400 px di larghezza al massimo e centrata; il trainer può sbloccarla. Nelle board copiate gli oggetti risultano del trainer.
+  In entrambi i casi gli allievi non possono spostare né cancellare il materiale: possono aggiungere i propri oggetti.
+- **Allievi:** `--allievi file.txt`, un allievo per riga, `Nome` oppure `Nome;gruppo` (le righe vuote e quelle che iniziano con `#` si ignorano). Chi non ha il gruppo va a quello meno numeroso.
+  Ognuno riceve un link personale (voti e proprietà degli oggetti sono per persona). Senza elenco si stampa un solo link per gruppo: chi lo usa condivide identità e puntini di voto.
+- **Link:** per ogni gruppo un link da trainer (`editor`) e quelli degli allievi (`participant`), validi 12 ore (`--ore`). Compaiono solo a video: contengono la firma d'accesso, non vengono salvati.
+- **Server:** `--server` (predefinito `http://localhost:3030`) e `--base` (indirizzo da mettere nei link, predefinito quello del server). Serve lo stesso `BOARD_SECRET` del server (ambiente o `.env`).
+- **Sicurezza di ripartenza:** una board di destinazione che ha già del contenuto viene **saltata** con un avviso, mai svuotata; per ricominciare usa un altro nome di corso.
+  Collegarsi a una board che non esiste ne crea la cartella vuota (succede anche con un nome di `board:` sbagliato).
+
 ## Sul Raspberry (Docker)
 
 Come la variante tldraw: `.env` con `BOARD_SECRET`, `mkdir -p data && sudo chown 1000:1000 data`, `docker compose up -d --build`.
