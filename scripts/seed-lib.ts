@@ -22,7 +22,9 @@ export function groupRoom(corso: string, n: number): string {
   return `${corso}-g${n}`;
 }
 
-const USO = 'Uso: npm run seed -- <corso> <gruppi> <immagine | board:ID> [--server URL] [--base URL] [--ore N] [--trainer "Nome"] [--allievi file]';
+const USO =
+  'Uso: npm run seed -- <corso> <gruppi> <immagine | board:ID> [--server URL] [--base URL] [--ore N] [--trainer "Nome"] [--allievi file] [--password testo] [--fino-al AAAA-MM-GG | nessuna]\n' +
+  "In PowerShell usa  npm.cmd run seed -- …  (con  npm  le opzioni che iniziano con -- vanno perse), oppure  npx tsx scripts/seed.ts …";
 
 /** Indirizzo http(s) completo, senza `/` finali: senza lo schema i link stampati non funzionerebbero. */
 function cleanUrl(v: string, opt: string): string | { errore: string } {

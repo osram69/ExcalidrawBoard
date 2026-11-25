@@ -52,11 +52,14 @@ Test automatici (timer, votazione, messaggi e ruoli del server, template, librer
 
 ## Classi di lavoro (una board per gruppo)
 
+> **PowerShell:** i comandi `seed` si scrivono con `npm.cmd` (come negli esempi). Con `npm` semplice PowerShell toglie il `--` e le opzioni che iniziano con `--` (`--password`, `--fino-al`, `--base`…) vanno perse senza avvisi.
+> In alternativa: `npx tsx scripts/seed.ts <corso> <gruppi> <materiale> …`. In `cmd` e nei terminali Linux/macOS vale anche `npm run seed -- …`.
+
 Per le esercitazioni a gruppi, `npm run seed` prepara una board per ogni gruppo con lo stesso materiale di partenza e stampa i link:
 
 ```powershell
-npm run seed -- isaqb-dic26 4 uml.png --allievi allievi.txt --ore 8
-npm run seed -- isaqb-dic26 3 board:lezione1 --server https://board.esempio.it
+npm.cmd run seed -- isaqb-dic26 4 uml.png --allievi allievi.txt --ore 8
+npm.cmd run seed -- isaqb-dic26 3 board:lezione1 --server https://board.esempio.it
 ```
 
 - Crea `isaqb-dic26-g1 … -g4` (nome del corso al massimo 60 caratteri; da 1 a 12 gruppi).
@@ -76,7 +79,7 @@ Il trainer dà **un solo link per board**, uguale per tutti (`https://…/b/<boa
 (la stessa che Cube Academy comunica a tutti gli iscritti di quell'edizione, per esempio quella di dicembre). Poi entra con il proprio nome e il trainer ne vede il cursore, come in Miro.
 
 ```powershell
-npm run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" --fino-al 2026-12-20
+npm.cmd run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" --fino-al 2026-12-20
 ```
 
 - **Password e fine sessione:** `--password` (da 8 a 200 caratteri) vale per tutte le board del corso e si conserva sul server **solo come impronta** (scrypt), mai in chiaro;

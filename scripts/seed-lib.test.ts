@@ -203,3 +203,9 @@ test("parseArgs: --fino-al nessuna toglie la data di fine (solo con --password)"
   const r: any = parseArgs(["corso", "2", "x.png", "--fino-al", "nessuna"]);
   assert.ok(typeof r.errore === "string" && /--password/.test(r.errore));
 });
+
+test("parseArgs: il messaggio d'uso elenca tutte le opzioni e avverte di PowerShell", () => {
+  const r: any = parseArgs([]);
+  for (const o of ["--server", "--base", "--ore", "--trainer", "--allievi", "--password", "--fino-al"]) assert.ok(r.errore.includes(o), o);
+  assert.match(r.errore, /PowerShell/);
+});
