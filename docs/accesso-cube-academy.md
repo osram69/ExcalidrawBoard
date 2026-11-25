@@ -65,3 +65,12 @@ const token = `${body}.${sig}`;
 | board (Raspberry) | `TRAINER_LOGIN_URL` | indirizzo della rotta del sito, per esempio `https://cubeacademy.eu/materiali/board` |
 
 L'orologio del Raspberry deve essere sincronizzato (NTP): la scadenza del token è controllata da lì.
+
+## Uso in produzione: cose da sapere
+
+- **`BOARD_URL` deve elencare tutti gli indirizzi da cui i trainer aprono la board**, scritti come li mostra il browser (schema, nome e porta). Se la board viene aperta da un altro indirizzo (l'IP del Raspberry in rete locale, `http` al posto di `https`, un secondo nome del tunnel) il sito risponde "Indirizzo della board non abilitato" e scrive l'indirizzo rifiutato nel suo log. Un eventuale percorso nella voce si ignora. Mai `http://localhost` in produzione.
+- **`BOARD_TOKEN_HOURS`** va da 1 a 72 ore; oltre si ferma a 72.
+- **Se il trainer torna sulla board e vede "L'accesso non è valido: accedi di nuovo"** in modo ripetuto: controlla che `BOARD_SECRET` sia **identico** sul sito e sulla board (nessuno spazio in più) e che gli orologi siano sincronizzati (NTP). La board non distingue un segreto sbagliato da un accesso scaduto.
+- **Cambiare `BOARD_SECRET`:** va cambiato nello stesso momento sul sito e sulla board; da quel momento tutti i link firmati e gli accessi già emessi (anche quelli degli allievi) non valgono più.
+- **Computer condivisi:** il token da trainer dura fino a 12 ore e il browser ricorda l'indirizzo con `?t=` nella cronologia. Su un computer condiviso usa una finestra privata, oppure `Esci` quando hai finito.
+- **Chi può usare l'account:** qualsiasi utente con ruolo `trainer` apre qualsiasi board. Togliere o declassare un trainer in `/admin/materiali` impedisce nuovi accessi, ma non revoca un token già emesso prima della sua scadenza.

@@ -109,7 +109,7 @@ c'è il pulsante **"Accedi come trainer"**. Porta al login di `/materiali` sul s
 (la board non contatta mai il sito né Supabase: lo scambio è solo un reindirizzamento del browser con un token firmato, quindi funziona anche con la board su un Raspberry a casa raggiungibile dal tunnel).
 
 - Si attiva impostando `TRAINER_LOGIN_URL` (indirizzo della rotta del sito, per esempio `https://cubeacademy.eu/materiali/board`); senza, il pulsante non compare e restano i link firmati (`npm run token`).
-- Qualsiasi trainer apre qualsiasi board e ne crea di nuove dandole un nome. Il token dura 12 ore.
+- Qualsiasi trainer apre qualsiasi board e ne crea di nuove dandole un nome. Il token lo emette il sito e dura 12 ore (impostabile sul sito, da 1 a 72).
 - La parte del sito (rotta `/materiali/board`, `BOARD_SECRET`, `BOARD_URL`) e il formato del token sono descritti in [docs/accesso-cube-academy.md](docs/accesso-cube-academy.md).
 
 ## Aula e stanze dal vivo (come le stanze di Zoom o di Miro)

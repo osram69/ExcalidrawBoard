@@ -32,7 +32,7 @@ export function Home() {
         <h1>
           Cube<span>Academy</span> Board
         </h1>
-        {trainerUrl ? (
+        {trainerUrl === undefined ? null : trainerUrl ? (
           <>
             <p className="login-room">Sei un trainer? Apri o crea una board con il tuo account Cube Academy.</p>
             <label>

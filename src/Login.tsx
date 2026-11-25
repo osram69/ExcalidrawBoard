@@ -89,7 +89,7 @@ export function Login({ room, reason, trainerLoginUrl, onLogin }: Props) {
           <div className="login-trainer">
             <span>Sei un trainer?</span>
             <button type="button" onClick={() => location.assign(trainerLoginRedirect(trainerLoginUrl, room, location.origin))}>
-              Accedi con il tuo account Cube Academy
+              Accedi come trainer
             </button>
           </div>
         )}
