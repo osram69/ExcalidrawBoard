@@ -22,8 +22,10 @@ async function checkAccess(session: BoardSession): Promise<{ ok: true } | { ok: 
 
 function BoardPage({ room }: { room: string }) {
   const [state, setState] = useState<State>(() => {
+    const hadLink = new URL(location.href).searchParams.has("t"); // arrivato con un link firmato (che loadSession toglie dall'indirizzo)
     const s = loadSession(room);
-    return s ? { kind: "checking" } : { kind: "login" };
+    if (s) return { kind: "checking" };
+    return hadLink ? { kind: "login", reason: "Il link non è valido o è scaduto: accedi con la password della sessione." } : { kind: "login" };
   });
 
   useEffect(() => {
