@@ -274,7 +274,11 @@ export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: Bo
           if (m.open) setBudgetDraft(m.perPerson);
         } else if (m.t === "my-votes") setMyVotes({ mine: m.mine, left: m.left });
         else if (m.t === "presence") setPresence({ rooms: m.rooms, current: m.current, history: m.history });
-        else if (m.t === "goto") onGoto(m.room, m.token);
+        else if (m.t === "goto") {
+          // prima si manda quello che è ancora in attesa (ultime modifiche, immagini), poi si cambia pagina
+          flush();
+          window.setTimeout(() => onGoto(m.room, m.token), 200);
+        }
         else if (m.t === "rooms-error") setRoomsErr(m.motivo);
         else if (m.t === "els") applyRemote(m.els);
         else if (m.t === "deny") {
@@ -357,7 +361,7 @@ export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: Bo
           </span>
           <span className="chip">{readonly ? "sola lettura" : participant ? "modifica i propri oggetti" : "può modificare tutto"}</span>
           <span className="board-user">{session.name}</span>
-          {where && where.n !== null && <span className="chip chip-room">Stanza {where.n}</span>}
+          {where && <span className="chip chip-room">{where.n !== null ? `Stanza ${where.n}` : "Aula"}</span>}
           {session.role === "editor" && (
             <>
               <button className="chip chip-btn" onClick={() => setPanel(panel === "stanze" ? null : "stanze")}>

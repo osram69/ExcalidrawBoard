@@ -1,7 +1,9 @@
 // Il corso: un'aula e i suoi turni di stanze. Tiene in memoria lo stato (letto da `course.json`), il timer comune, la presenza dei collegati
 // e le regole su chi può entrare in quale stanza. Ogni board ha un corso: l'aula (o una board qualsiasi) è il corso di se stessa.
+import fs from "node:fs";
+import path from "node:path";
 import { signToken, type Role } from "./auth.ts";
-import { readCourse, readParent, type CourseData, type Member, type Round } from "./course-data.ts";
+import { courseStatus, readCourse, readParent, writeCourse, type CourseData, type Member, type Round } from "./course-data.ts";
 import { loadedRoom, roomDir, type Room } from "./rooms.ts";
 import { RoomTimer } from "./timer.ts";
 
@@ -38,9 +40,27 @@ export interface Where {
 export class Course {
   data: CourseData;
   readonly timer = new RoomTimer();
+  /** Il file del corso esiste ma non si legge: non si creano altre stanze (si rischierebbe di sovrascrivere il lavoro dei turni precedenti). */
+  readonly corrupt: boolean;
+  creating = false; // una creazione di stanze è in corso
 
   constructor(readonly aula: string, readonly dataDir: string, readonly secret: string) {
+    this.corrupt = courseStatus(this.dir) === "corrupt";
+    if (this.corrupt) {
+      console.error(`course.json dell'aula ${aula} danneggiato: ne conservo una copia in course.json.bad`);
+      try {
+        fs.copyFileSync(path.join(this.dir, "course.json"), path.join(this.dir, "course.json.bad"));
+      } catch {
+        /* non si può copiare (per esempio non è un file): il blocco resta */
+      }
+    }
     this.data = readCourse(this.dir);
+  }
+
+  /** Scrive il nuovo stato su disco e solo dopo lo adotta in memoria: se la scrittura fallisce, memoria e disco restano coerenti. */
+  commit(next: CourseData): void {
+    writeCourse(this.dir, next);
+    this.data = next;
   }
 
   get dir(): string {

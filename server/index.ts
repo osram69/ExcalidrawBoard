@@ -136,6 +136,11 @@ server.on("upgrade", (req, socket, head) => {
     ws.on("close", () => clearTimeout(expTimer));
 
     ws.on("message", (data) => {
+      // il server non si fida che il client obbedisca a `goto`: chi non può più stare in questa board (spostato, turno chiuso) viene scollegato
+      if (!course.canEnter(room, peer)) {
+        ws.close(4002, "spostato");
+        return;
+      }
       let msg: any;
       try {
         msg = JSON.parse(data.toString());

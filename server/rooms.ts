@@ -148,6 +148,29 @@ export class Room {
     }
   }
 
+  /** Come `flush`, ma senza bloccare il server e segnalando i fallimenti (serve a chi crea molte board insieme). */
+  async flushAsync(): Promise<void> {
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    this.saveTimer = null;
+    this.votes.flush();
+    await fs.promises.mkdir(path.join(this.dir, "files"), { recursive: true });
+    const tmp = path.join(this.dir, `scene.json.${process.pid}.part`);
+    await fs.promises.writeFile(tmp, JSON.stringify({ elements: [...this.els.values()] }));
+    await fs.promises.rename(tmp, path.join(this.dir, "scene.json"));
+    for (const id of [...this.dirtyFiles]) {
+      await fs.promises.writeFile(path.join(this.dir, "files", `${id}.json`), JSON.stringify(this.files.get(id)));
+      this.dirtyFiles.delete(id);
+    }
+  }
+
+  /** Se non c'è nessuno collegato, la board esce dalla memoria dopo `ms` (un minuto di solito). Le board create e mai raggiunte non restano in memoria. */
+  release(ms = 60_000) {
+    if (this.peers.size) return;
+    if (this.idle) clearTimeout(this.idle);
+    this.idle = setTimeout(() => !this.peers.size && this.onEmpty(), ms);
+    this.idle.unref();
+  }
+
   broadcast(msg: unknown, except?: Peer) {
     const s = JSON.stringify(msg);
     for (const p of this.peers) if (p !== except && p.ws.readyState === 1) p.ws.send(s);
@@ -164,9 +187,7 @@ export class Room {
     this.broadcast({ t: "leave", id: p.id });
     if (!this.peers.size) {
       this.flush();
-      // libera la memoria dopo un minuto senza nessuno collegato
-      this.idle = setTimeout(() => !this.peers.size && this.onEmpty(), 60_000);
-      this.idle.unref();
+      this.release();
     }
   }
 }

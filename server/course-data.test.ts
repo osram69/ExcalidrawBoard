@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { assignedRoom, openRound, readCourse, readParent, writeCourse, writeParent, type CourseData } from "./course-data.ts";
+import { assignedRoom, courseStatus, openRound, readCourse, readParent, writeCourse, writeParent, type CourseData } from "./course-data.ts";
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), "course-"));
 const sample = (): CourseData => ({
@@ -53,4 +53,18 @@ test("readParent/writeParent: giro completo, null se manca o è malformato", () 
     fs.writeFileSync(path.join(d, "parent.json"), bad);
     assert.equal(readParent(d), null, bad);
   }
+});
+
+test("courseStatus: mancante, valido o danneggiato (non si confondono)", () => {
+  const d = tmp();
+  assert.equal(courseStatus(d), "missing");
+  writeCourse(d, sample());
+  assert.equal(courseStatus(d), "ok");
+  fs.writeFileSync(path.join(d, "course.json"), "{non json");
+  assert.equal(courseStatus(d), "corrupt");
+  fs.writeFileSync(path.join(d, "course.json"), JSON.stringify({ round: "x" }));
+  assert.equal(courseStatus(d), "corrupt");
+  fs.rmSync(path.join(d, "course.json"));
+  fs.mkdirSync(path.join(d, "course.json")); // illeggibile come file
+  assert.equal(courseStatus(d), "corrupt");
 });

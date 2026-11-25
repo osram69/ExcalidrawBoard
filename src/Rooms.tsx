@@ -16,6 +16,7 @@ interface Props {
 export function Rooms({ presence, aula, here, error, send, clearError, onClose }: Props) {
   const [count, setCount] = useState(3);
   const [assign, setAssign] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false); // creazione in corso: evita il doppio clic
   const inAula = here === aula;
 
   const people = useMemo(() => {
@@ -31,7 +32,11 @@ export function Rooms({ presence, aula, here, error, send, clearError, onClose }
 
   const nRooms = Math.min(MAX_ROOMS, Math.max(MIN_ROOMS, count));
   const chosen = Object.fromEntries(Object.entries(assign).filter(([k, n]) => n >= 1 && n <= nRooms && inAulaStudents.some((p) => p.key === k)));
-  const create = () => send({ t: "rooms-create", rooms: nRooms, assign: chosen });
+  const create = () => {
+    setBusy(true);
+    send({ t: "rooms-create", rooms: nRooms, assign: chosen });
+    window.setTimeout(() => setBusy(false), 8000); // se non arriva né l'esito né un errore, si può riprovare
+  };
 
   return (
     <aside className="side-panel" aria-label="Stanze">
@@ -88,8 +93,8 @@ export function Rooms({ presence, aula, here, error, send, clearError, onClose }
             <button className="side-btn" disabled={!inAulaStudents.length} onClick={() => setAssign({ ...randomAssign(inAulaStudents.map((p) => p.key), nRooms) })}>
               Distribuisci a caso
             </button>
-            <button className="side-btn primary" disabled={!Object.keys(chosen).length} onClick={create}>
-              Crea e sposta
+            <button className="side-btn primary" disabled={busy || !Object.keys(chosen).length} onClick={create}>
+              {busy ? "Creo le stanze…" : "Crea e sposta"}
             </button>
           </div>
         </section>

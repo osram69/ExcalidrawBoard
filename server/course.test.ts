@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { inspectToken, type Role } from "./auth.ts";
 import { Course, getCourse, gotoToken } from "./course.ts";
 import { writeCourse, writeParent, type CourseData } from "./course-data.ts";
-import { getRoom, roomDir, type Peer } from "./rooms.ts";
+import { getRoom, loadedRoom, roomDir, type Peer } from "./rooms.ts";
 
 const SECRET = "chiave-di-prova";
 const NOW = 1_800_000_000_000;
@@ -120,4 +120,53 @@ test("Course: timer comune e broadcast a tutte le board caricate del corso", () 
   assert.equal(b.length, 1);
   assert.ok(course instanceof Course);
   assert.equal(course.timer.state.status, "idle");
+});
+
+test("commit: scrive prima su disco e solo dopo aggiorna la memoria; se la scrittura fallisce lo stato non cambia", () => {
+  const { course } = setup("aula-g");
+  const before = JSON.stringify(course.data);
+  const next: CourseData = { round: 3, rounds: [...course.data.rounds, { round: 3, open: true, createdAt: 3, rooms: [] }] };
+  course.commit(next);
+  assert.equal(course.data, next);
+  // dataDir in cui "rooms" è un file: non si può scrivere
+  const bad = fs.mkdtempSync(path.join(os.tmpdir(), "course-bad-"));
+  fs.writeFileSync(path.join(bad, "rooms"), "sono un file");
+  const broken = new Course("aula-x", bad, SECRET);
+  const keep = broken.data;
+  assert.throws(() => broken.commit({ round: 1, rounds: [] }));
+  assert.equal(broken.data, keep, "la memoria non cambia se il disco fallisce");
+  assert.ok(before.length > 0);
+});
+
+test("course: un file danneggiato lo segnala e ne conserva una copia", () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "course-corrupt-"));
+  const dir = roomDir(dataDir, "aula-h");
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, "course.json"), "{rotto");
+  const c = new Course("aula-h", dataDir, SECRET);
+  assert.equal(c.corrupt, true);
+  assert.equal(fs.readFileSync(path.join(dir, "course.json.bad"), "utf8"), "{rotto");
+  assert.equal(new Course("aula-nuova", dataDir, SECRET).corrupt, false, "mancante non è danneggiato");
+});
+
+test("Room.flushAsync scrive scena e immagini e segnala i fallimenti; release scarica le board senza nessuno", async () => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "flush-"));
+  const room = getRoom(dataDir, "flush-ok");
+  room.applyFiles([{ id: "f1", mimeType: "image/png", dataURL: "data:image/png;base64,AAAA", created: 1 }]);
+  room.applyElements([{ id: "e1", version: 1, versionNonce: 1, type: "rectangle", x: 0, y: 0, width: 1, height: 1, strokeColor: "#000", backgroundColor: "#fff" }], { key: "t", role: "editor" });
+  await room.flushAsync();
+  assert.equal(JSON.parse(fs.readFileSync(path.join(roomDir(dataDir, "flush-ok"), "scene.json"), "utf8")).elements.length, 1);
+  assert.equal(fs.existsSync(path.join(roomDir(dataDir, "flush-ok"), "files", "f1.json")), true);
+  const bad = fs.mkdtempSync(path.join(os.tmpdir(), "flush-bad-"));
+  fs.writeFileSync(path.join(bad, "rooms"), "sono un file");
+  await assert.rejects(getRoom(bad, "flush-ko").flushAsync());
+  // release: una board senza nessuno esce dalla memoria; una con qualcuno no
+  const solo = getRoom(dataDir, "rel-1");
+  solo.release(20);
+  const conGente = getRoom(dataDir, "rel-2");
+  conGente.join(peer("x", "participant"));
+  conGente.release(20);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(loadedRoom("rel-1"), undefined);
+  assert.ok(loadedRoom("rel-2"));
 });

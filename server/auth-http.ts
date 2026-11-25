@@ -4,6 +4,7 @@
 //   PUT  /auth/access?room=<board>        (editor della board) { password?, until? }            -> { ok, until }
 //   GET  /auth/check?room=<board>         Authorization: Bearer <token>                         -> { ok, name, role, exp }
 import type http from "node:http";
+import { readParent } from "./course-data.ts";
 import path from "node:path";
 import { inspectToken, personalUid, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
 import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess } from "./access.ts";
@@ -132,6 +133,12 @@ export function createAuthHandler(opts: AuthOptions) {
     json(res, 200, { ok: true, until });
   }
 
+  /** L'aula di una stanza (pubblico: il nome dell'aula è già nel nome della stanza): serve a riportare allo giusto login chi arriva a una stanza senza accesso. */
+  function aulaOfRoom(res: http.ServerResponse, room: string) {
+    const p = ROOM_ID.test(room) ? readParent(roomDir(room)) : null;
+    json(res, 200, { aula: p?.aula ?? null });
+  }
+
   function checkToken(req: http.IncomingMessage, res: http.ServerResponse, room: string) {
     const c = ROOM_ID.test(room) ? inspectToken(bearer(req), room, opts.secret) : ({ ok: false, motivo: "non valido" } as const);
     if (!c.ok) return fail(res, 401, c.motivo);
@@ -147,6 +154,8 @@ export function createAuthHandler(opts: AuthOptions) {
         return req.method === "POST" ? login(req, res) : fail(res, 405, "Metodo non consentito.");
       case "/auth/access":
         return req.method === "PUT" ? setAccess(req, res, room) : fail(res, 405, "Metodo non consentito.");
+      case "/auth/aula":
+        return req.method === "GET" ? aulaOfRoom(res, room) : fail(res, 405, "Metodo non consentito.");
       case "/auth/check":
         return req.method === "GET" ? checkToken(req, res, room) : fail(res, 405, "Metodo non consentito.");
       default:

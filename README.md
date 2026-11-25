@@ -121,6 +121,10 @@ Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanz
 - **Limiti:** un solo turno aperto alla volta (per rifare le stanze chiudi quello aperto); si assegna chi è collegato in quel momento; ciò che i gruppi aggiungono nelle stanze non viene riportato in aula (restano consultabili);
   votazioni e note votate restano per board; sul server restano in memoria le board attive, il resto è su disco (`data/rooms/`).
 - **Differenza con `seed`:** `seed` prepara in anticipo una board per gruppo da dare con link; le stanze dal vivo si creano durante la lezione. Si possono usare entrambi.
+- **Sicurezza e recupero:** il server non si fida che il browser obbedisca allo spostamento: chi resta collegato a una stanza dopo averla lasciata (spostato o turno chiuso) viene scollegato e le sue modifiche non vengono salvate.
+  Le nuove stanze non toccano mai una board che esiste già con quel nome (per esempio dopo aver perso `course.json`): si usa il primo turno libero. Se `course.json` dell'aula è danneggiato non si creano stanze (per non perdere quelle esistenti) e se ne conserva una copia in `course.json.bad`.
+  Chi arriva a una stanza senza un accesso valido viene riportato al login dell'aula e da lì rientra nella sua stanza.
+- **Identità:** l'email dichiarata al login decide anche in quale stanza si entra. Chi conosce l'email di un compagno e la password della sessione può entrare come lui: la mail identifica ma non autentica (vedi "Accesso degli allievi").
 
 ## Sul Raspberry (Docker)
 

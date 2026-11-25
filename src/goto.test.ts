@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { closedAula, gotoUrl, saveGotoToken } from "./goto.ts";
+import { aulaOf, closedAula, gotoUrl, saveGotoToken } from "./goto.ts";
 import type { StorageLike } from "./remember.ts";
 import { placeLabel, type PresenceInfo } from "./roomsLogic.ts";
 
@@ -54,4 +54,18 @@ test("placeLabel: aula, stanza del turno aperto, stanza di un turno passato, boa
   assert.equal(placeLabel("a-r1-s1", "a", presence), "Stanza 1 (turno 1)");
   assert.equal(placeLabel("boh", "a", presence), "boh");
   assert.equal(placeLabel("a", "a", null), "Aula");
+});
+
+test("saveGotoToken: se la persona ha scelto 'ricordami' il token resta sul dispositivo (non perde l'accesso dopo le stanze)", () => {
+  const s = { local: fake(), session: fake() };
+  s.local.setItem("board:profile", JSON.stringify({ nome: "Anna", cognome: "Rossi", email: "a@b.it", ricordami: true }));
+  s.session.setItem("board:token:aula", "VECCHIO-SESSIONE");
+  saveGotoToken(s, "aula", "NUOVO");
+  assert.equal(s.local.getItem("board:token:aula"), "NUOVO");
+  assert.equal(s.session.getItem("board:token:aula"), null);
+});
+
+test("aulaOf: l'aula di una stanza, solo se è un nome valido", () => {
+  assert.equal(aulaOf({ aula: "isaqb-dic26" }), "isaqb-dic26");
+  for (const bad of [null, undefined, {}, { aula: null }, { aula: "../x" }, { aula: 5 }, "testo"]) assert.equal(aulaOf(bad), null, JSON.stringify(bad));
 });

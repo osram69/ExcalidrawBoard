@@ -49,6 +49,22 @@ export function readCourse(dir: string): CourseData {
   }
 }
 
+/** Stato del file del corso: "missing" (nessun corso ancora), "ok" o "corrupt" (illeggibile o con un formato che non riconosciamo: non va trattato come vuoto). */
+export function courseStatus(dir: string): "missing" | "ok" | "corrupt" {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(dir, COURSE), "utf8");
+  } catch (e) {
+    return (e as NodeJS.ErrnoException).code === "ENOENT" ? "missing" : "corrupt";
+  }
+  try {
+    const j = JSON.parse(raw);
+    return int(j?.round) && Array.isArray(j.rounds) && j.rounds.every(validRound) ? "ok" : "corrupt";
+  } catch {
+    return "corrupt";
+  }
+}
+
 function writeAtomic(file: string, data: unknown): void {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.part`;

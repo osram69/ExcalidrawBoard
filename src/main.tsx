@@ -3,7 +3,7 @@ import { createRoot } from "react-dom/client";
 import { Board } from "./Board";
 import { Login } from "./Login";
 import { reasonText } from "./remember";
-import { closedAula, gotoUrl } from "./goto";
+import { aulaOf, closedAula, gotoUrl } from "./goto";
 import { acceptLogin, dropSession, loadSession, moveTo, roomFromPath, type BoardSession } from "./session";
 import "./styles.css";
 
@@ -60,6 +60,22 @@ function BoardPage({ room }: { room: string }) {
     dropSession(room, false);
     setState({ kind: "login", reason: "La sessione è terminata o il tuo accesso è scaduto: accedi di nuovo." });
   }, [room]);
+
+  // chi arriva a una stanza senza un accesso valido non ha un login per quella stanza: lo si porta al login dell'aula (da lì rientra nella sua stanza)
+  useEffect(() => {
+    if (state.kind !== "login") return;
+    let alive = true;
+    fetch(`/auth/aula?room=${encodeURIComponent(room)}`)
+      .then((r) => r.json())
+      .then((j) => {
+        const aula = aulaOf(j);
+        if (alive && aula && aula !== room) location.replace(gotoUrl(aula));
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [state.kind, room]);
 
   const onGoto = useCallback((to: string, token: string) => moveTo(to, token), []);
   const onBackToAula = useCallback(
