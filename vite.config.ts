@@ -7,7 +7,7 @@ export default defineConfig({
   define: { "process.env.IS_PREACT": JSON.stringify("false") },
   server: {
     port: 5173,
-    proxy: { "/connect": { target: "ws://localhost:3030", ws: true } },
+    proxy: { "/connect": { target: "ws://localhost:3030", ws: true }, "/auth": { target: "http://localhost:3030" } },
   },
   build: { outDir: "dist", chunkSizeWarningLimit: 6000 },
 });

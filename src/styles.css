@@ -64,3 +64,22 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .tpl-menu { position: absolute; bottom: calc(100% + 10px); left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 2px; min-width: 240px; padding: 6px; background: #fff; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25); }
 .tpl-menu button { text-align: left; border: none; background: none; padding: 7px 10px; border-radius: 6px; font: inherit; font-size: 13px; cursor: pointer; }
 .tpl-menu button:hover { background: #faf0ee; color: var(--flame); }
+
+/* pagina di accesso */
+.chip-btn { border: 0; color: #fff; font: inherit; font-size: 12px; cursor: pointer; }
+.chip-btn:hover { background: rgba(255, 255, 255, 0.25); }
+.login-page { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
+.login-card { width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; padding: 28px; background: #fff; border-radius: 16px; box-shadow: 0 6px 30px rgba(19, 17, 23, 0.14); }
+.login-card h1 { margin: 0; font-size: 22px; }
+.login-card h1 span { color: var(--flame); }
+.login-room { margin: 0; color: #666; font-size: 14px; }
+.login-reason { margin: 0; padding: 8px 12px; background: #fff4e0; border-radius: 8px; font-size: 14px; }
+.login-card label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; flex: 1; }
+.login-card input[type="text"], .login-card input[type="email"], .login-card input[type="password"], .login-card input:not([type]) { font: inherit; font-weight: 400; padding: 9px 11px; border: 1px solid #ccc; border-radius: 8px; }
+.login-card input:focus { outline: 2px solid var(--flame); outline-offset: 0; border-color: transparent; }
+.login-row { display: flex; gap: 10px; }
+.login-hint { margin: -4px 0 0; color: #666; font-size: 12px; }
+.login-card .login-check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; }
+.login-error { margin: 0; padding: 8px 12px; background: #ffe1dd; color: #8a1c10; border-radius: 8px; font-size: 14px; }
+.login-card button[type="submit"] { padding: 11px; border: 0; border-radius: 10px; background: var(--flame); color: #fff; font: inherit; font-weight: 700; cursor: pointer; }
+.login-card button[type="submit"]:disabled { opacity: 0.6; cursor: default; }

@@ -77,7 +77,7 @@ test("immagine su 3 gruppi con 5 allievi: board create, link giusti, immagine bl
   assert.equal(code, 0, text);
   for (const g of [1, 2, 3]) assert.ok(text.includes(`corso1-g${g}`), `manca il gruppo ${g}`);
   assert.equal((text.match(/Trainer: http/g) ?? []).length, 3);
-  for (const n of ["Anna", "Marco", "Giulia", "Luca", "Sara"]) assert.match(text, new RegExp(`${n}: http`));
+  for (const n of ["Anna", "Marco", "Giulia", "Luca", "Sara"]) assert.match(text, new RegExp(`${n} \\(link personale\\): http`));
   const v = await connectBoard(url, "corso1-g1", token("corso1-g1", "viewer"));
   assert.equal(v.els.length, 1);
   assert.equal(v.els[0].type, "image");
@@ -293,4 +293,38 @@ test("segreto sbagliato: errore chiaro che nomina BOARD_SECRET, nessuna board cr
   assert.equal(code, 1);
   assert.match(out.join("\n"), /BOARD_SECRET/);
   assert.equal(roomDirs().filter((d) => d.startsWith("corso12-")).length, 0);
+});
+
+test("--password e --fino-al: accesso con password su ogni board, link semplici, password mai stampata", async () => {
+  const { code, text } = await run(["corso13", "2", pngFile("ok13.png"), "--password", "dicembre-2026", "--fino-al", "2099-12-20"]);
+  assert.equal(code, 0, text);
+  assert.ok(!text.includes("dicembre-2026"), "la password non va stampata");
+  for (const g of [1, 2]) {
+    assert.ok(text.includes(`${url}/b/corso13-g${g}\n`) || text.includes(`${url}/b/corso13-g${g}`), `manca il link semplice del gruppo ${g}`);
+    const r = await fetch(`${url}/auth/login`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ room: `corso13-g${g}`, nome: "Anna", cognome: "Rossi", email: "anna@esempio.it", password: "dicembre-2026" }),
+    });
+    assert.equal(r.status, 200, `login gruppo ${g}`);
+  }
+  assert.match(text, /Allievi \(accesso con password/);
+  assert.ok(!/Allievi \(link di gruppo/.test(text));
+});
+
+test("rilanciando con un'altra password su board già piene, la password si aggiorna", async () => {
+  const { code, text } = await run(["corso13", "2", pngFile("ok14.png"), "--password", "gennaio-2027"]);
+  assert.equal(code, 0, text);
+  assert.equal((text.match(/saltata/g) ?? []).length, 2);
+  const login = (password: string) =>
+    fetch(`${url}/auth/login`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room: "corso13-g1", nome: "Anna", cognome: "Rossi", email: "anna@esempio.it", password }) });
+  assert.equal((await login("gennaio-2027")).status, 200);
+  assert.equal((await login("dicembre-2026")).status, 401);
+});
+
+test("se il server rifiuta la password (segreto diverso) l'errore è chiaro", async () => {
+  const out: string[] = [];
+  const code = await main(["corso14", "1", pngFile("ok15.png"), "--password", "dicembre-2026", "--server", url], { BOARD_SECRET: "un-altro-segreto" } as NodeJS.ProcessEnv, (l) => out.push(l));
+  assert.equal(code, 1);
+  assert.match(out.join("\n"), /BOARD_SECRET/);
 });

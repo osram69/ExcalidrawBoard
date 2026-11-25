@@ -178,3 +178,21 @@ test("parseArgs: --server e --base devono essere indirizzi http(s) completi", ()
   assert.equal(a.server, "https://x.org");
   assert.equal(a.base, "http://localhost:5173");
 });
+
+test("parseArgs: --password e --fino-al per l'accesso con password di sessione", () => {
+  const a = ok(parseArgs(["corso", "2", "x.png", "--password", "dicembre-2026", "--fino-al", "2099-12-20"]));
+  assert.equal(a.password, "dicembre-2026");
+  assert.equal(a.fino, new Date(2099, 11, 20, 23, 59, 59, 999).getTime());
+  const b = ok(parseArgs(["corso", "2", "x.png"]));
+  assert.equal(b.password, undefined);
+  assert.equal(b.fino, undefined);
+});
+
+test("parseArgs: password e data non validi", () => {
+  for (const extra of [["--password", "corta"], ["--password", "a".repeat(201)], ["--fino-al", "20/12/2099"], ["--fino-al", "2099-02-31"], ["--fino-al", "2000-01-01"], ["--fino-al", "domani"]]) {
+    const r: any = parseArgs(["corso", "2", "x.png", ...extra]);
+    assert.ok(typeof r.errore === "string" && r.errore.includes(extra[0]), extra.join(" "));
+  }
+  const r: any = parseArgs(["corso", "2", "x.png", "--fino-al", "2099-12-20"]);
+  assert.ok(typeof r.errore === "string" && /--password/.test(r.errore), "la data senza password non ha senso");
+});

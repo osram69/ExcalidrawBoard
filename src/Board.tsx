@@ -23,7 +23,13 @@ const NOTE_COLORS = [
   { name: "Arancio", bg: "#ffd8a8" },
 ];
 
-export function Board({ session }: { session: BoardSession }) {
+interface BoardProps {
+  session: BoardSession;
+  onExpired: () => void; // il server ha chiuso il collegamento perché l'accesso è scaduto (codice 4001)
+  onLogout?: () => void; // "Esci": solo per chi è entrato con il login
+}
+
+export function Board({ session, onExpired, onLogout }: BoardProps) {
   const apiRef = useRef<any>(null);
   const [api, setApi] = useState<any>(null);
   const [status, setStatus] = useState<Status>("connecting");
@@ -282,8 +288,14 @@ export function Board({ session }: { session: BoardSession }) {
           }
         }
       };
-      ws.onclose = () => {
+      ws.onclose = (ev) => {
         if (stop) return;
+        if (ev.code === 4001) {
+          // accesso scaduto: niente ritentativi, si torna al login
+          stop = true;
+          onExpired();
+          return;
+        }
         setStatus("offline");
         timer = window.setTimeout(open, Math.min(8000, 500 * 2 ** retry++));
       };
@@ -294,7 +306,7 @@ export function Board({ session }: { session: BoardSession }) {
       window.clearTimeout(timer);
       wsRef.current?.close();
     };
-  }, [api, session.room, session.token, readonly, applyRemote, flush, pushCollaborators]);
+  }, [api, session.room, session.token, readonly, applyRemote, flush, pushCollaborators, onExpired]);
 
   const lastPtr = useRef(0);
   return (
@@ -316,6 +328,11 @@ export function Board({ session }: { session: BoardSession }) {
           </span>
           <span className="chip">{readonly ? "sola lettura" : participant ? "modifica i propri oggetti" : "può modificare tutto"}</span>
           <span className="board-user">{session.name}</span>
+          {onLogout && (
+            <button className="chip chip-btn" onClick={onLogout} title="Esci e cancella i dati ricordati su questo dispositivo">
+              Esci
+            </button>
+          )}
         </div>
       </div>
       <div className="board-canvas">

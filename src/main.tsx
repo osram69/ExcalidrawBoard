@@ -1,8 +1,81 @@
-import { StrictMode } from "react";
+import { StrictMode, useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Board } from "./Board";
-import { loadSession, roomFromPath } from "./session";
+import { Login } from "./Login";
+import { reasonText } from "./remember";
+import { acceptLogin, dropSession, loadSession, roomFromPath, type BoardSession } from "./session";
 import "./styles.css";
+
+type State = { kind: "checking" } | { kind: "login"; reason?: string } | { kind: "board"; session: BoardSession };
+
+/** Chiede al server se l'accesso salvato vale ancora (non scaduto, non di un'altra board). Se il server non risponde, non blocca. */
+async function checkAccess(session: BoardSession): Promise<{ ok: true } | { ok: false; motivo?: string }> {
+  try {
+    const r = await fetch(`/auth/check?room=${encodeURIComponent(session.room)}`, { headers: { Authorization: `Bearer ${session.token}` } });
+    if (r.ok) return { ok: true };
+    if (r.status === 401) return { ok: false, motivo: (await r.json().catch(() => null))?.motivo };
+  } catch {
+    /* server non raggiungibile: la board mostrerà "offline" e ritenterà */
+  }
+  return { ok: true };
+}
+
+function BoardPage({ room }: { room: string }) {
+  const [state, setState] = useState<State>(() => {
+    const s = loadSession(room);
+    return s ? { kind: "checking" } : { kind: "login" };
+  });
+
+  useEffect(() => {
+    if (state.kind !== "checking") return;
+    const s = loadSession(room);
+    if (!s) return setState({ kind: "login" });
+    let alive = true;
+    checkAccess(s).then((r) => {
+      if (!alive) return;
+      if (r.ok) setState({ kind: "board", session: s });
+      else {
+        dropSession(room, false);
+        setState({ kind: "login", reason: reasonText(r.motivo) });
+      }
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [room]);
+
+  if (state.kind === "checking") return <div className="board-msg"><p>Verifico l'accesso…</p></div>;
+  if (state.kind === "login") {
+    return (
+      <Login
+        room={room}
+        reason={state.reason}
+        onLogin={(token, profile) => {
+          const s = acceptLogin(room, token, profile);
+          setState(s ? { kind: "board", session: s } : { kind: "login", reason: "L'accesso ricevuto non è valido: riprova." });
+        }}
+      />
+    );
+  }
+  return (
+    <Board
+      session={state.session}
+      onExpired={() => {
+        dropSession(room, false);
+        setState({ kind: "login", reason: "La sessione è terminata o il tuo accesso è scaduto: accedi di nuovo." });
+      }}
+      onLogout={
+        state.session.email
+          ? () => {
+              dropSession(room, true);
+              setState({ kind: "login" });
+            }
+          : undefined
+      }
+    />
+  );
+}
 
 function Page() {
   const room = roomFromPath();
@@ -14,16 +87,7 @@ function Page() {
       </div>
     );
   }
-  const session = loadSession(room);
-  if (!session) {
-    return (
-      <div className="board-msg">
-        <h1>Link non valido o scaduto</h1>
-        <p>Riapri la board dal link ricevuto, oppure chiedine uno nuovo al tuo trainer.</p>
-      </div>
-    );
-  }
-  return <Board session={session} />;
+  return <BoardPage room={room} />;
 }
 
 createRoot(document.getElementById("root")!).render(

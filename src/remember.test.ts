@@ -1,0 +1,85 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { clearAccess, loadProfile, readToken, reasonText, saveLogin, type StorageLike } from "./remember.ts";
+
+const fake = (): StorageLike & { data: Map<string, string> } => {
+  const data = new Map<string, string>();
+  return { data, getItem: (k) => data.get(k) ?? null, setItem: (k, v) => void data.set(k, v), removeItem: (k) => void data.delete(k) };
+};
+const stores = () => ({ local: fake(), session: fake() });
+const profile = (o = {}) => ({ nome: "Anna", cognome: "Rossi", email: "anna@esempio.it", ricordami: true, ...o });
+
+test("con ricordami: token e profilo restano sul dispositivo (localStorage), non nella sessione", () => {
+  const s = stores();
+  saveLogin(s, "corso-g1", "TOKEN", profile());
+  assert.equal(s.local.getItem("board:token:corso-g1"), "TOKEN");
+  assert.equal(s.session.getItem("board:token:corso-g1"), null);
+  assert.deepEqual(loadProfile(s), profile());
+  assert.equal(readToken(s, "corso-g1"), "TOKEN");
+});
+
+test("senza ricordami: token solo nella sessione, nessun profilo, e quanto ricordato prima viene cancellato", () => {
+  const s = stores();
+  saveLogin(s, "corso-g1", "VECCHIO", profile());
+  saveLogin(s, "corso-g1", "NUOVO", profile({ ricordami: false }));
+  assert.equal(s.session.getItem("board:token:corso-g1"), "NUOVO");
+  assert.equal(s.local.getItem("board:token:corso-g1"), null);
+  assert.deepEqual(loadProfile(s), { nome: "", cognome: "", email: "", ricordami: false });
+});
+
+test("il token di una board non tocca quello di un'altra", () => {
+  const s = stores();
+  saveLogin(s, "corso-g1", "T1", profile());
+  saveLogin(s, "corso-g2", "T2", profile({ ricordami: false }));
+  assert.equal(readToken(s, "corso-g1"), "T1");
+  assert.equal(readToken(s, "corso-g2"), "T2");
+  assert.equal(readToken(s, "corso-g3"), null);
+});
+
+test("readToken: prima la sessione, poi il dispositivo", () => {
+  const s = stores();
+  s.local.setItem("board:token:r", "LOCALE");
+  assert.equal(readToken(s, "r"), "LOCALE");
+  s.session.setItem("board:token:r", "SESSIONE");
+  assert.equal(readToken(s, "r"), "SESSIONE");
+});
+
+test("clearAccess: toglie i token; il profilo solo se richiesto (Esci)", () => {
+  const s = stores();
+  saveLogin(s, "r", "T", profile());
+  s.session.setItem("board:token:r", "S");
+  clearAccess(s, "r", false);
+  assert.equal(readToken(s, "r"), null);
+  assert.equal(loadProfile(s).email, "anna@esempio.it");
+  clearAccess(s, "r", true);
+  assert.deepEqual(loadProfile(s), { nome: "", cognome: "", email: "", ricordami: false });
+});
+
+test("loadProfile: valori mancanti, corrotti o di tipo sbagliato", () => {
+  const s = stores();
+  const empty = { nome: "", cognome: "", email: "", ricordami: false };
+  assert.deepEqual(loadProfile(s), empty);
+  s.local.setItem("board:profile", "{non json");
+  assert.deepEqual(loadProfile(s), empty);
+  s.local.setItem("board:profile", JSON.stringify({ nome: 5, cognome: null, email: ["x"], ricordami: "si" }));
+  assert.deepEqual(loadProfile(s), empty);
+  s.local.setItem("board:profile", JSON.stringify({ nome: "Anna", cognome: "Rossi", email: "a@b.it", ricordami: true, altro: 1 }));
+  assert.deepEqual(loadProfile(s), { nome: "Anna", cognome: "Rossi", email: "a@b.it", ricordami: true });
+});
+
+test("storage non disponibile (privato, bloccato): nessuna eccezione", () => {
+  const boom: StorageLike = { getItem: () => { throw new Error("bloccato"); }, setItem: () => { throw new Error("bloccato"); }, removeItem: () => { throw new Error("bloccato"); } };
+  const s = { local: boom, session: boom };
+  assert.doesNotThrow(() => saveLogin(s, "r", "T", profile()));
+  assert.doesNotThrow(() => clearAccess(s, "r", true));
+  assert.equal(readToken(s, "r"), null);
+  assert.equal(loadProfile(s).email, "");
+});
+
+test("reasonText: messaggio per ogni motivo del server", () => {
+  assert.match(reasonText("scaduto"), /scadut/i);
+  assert.match(reasonText("altra board"), /altra board|non è per questa/i);
+  assert.match(reasonText("non valido"), /non (è )?valid/i);
+  assert.ok(reasonText("qualcosa di nuovo").length > 0);
+  assert.ok(reasonText(undefined).length > 0);
+});

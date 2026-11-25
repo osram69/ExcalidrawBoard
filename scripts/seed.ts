@@ -195,6 +195,22 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
   );
   const link = (room: string, name: string, uid: string, role: Role) => `${args.base}/b/${room}?t=${signToken({ room, name, uid, role, exp }, secret)}`;
 
+  /** Imposta password di sessione e data di fine della board (il server conserva solo l'impronta della password). */
+  async function applyAccess(room: string): Promise<void> {
+    const editor = signToken({ room, name: args.trainer, uid: "trainer", role: "editor", exp }, secret);
+    const r = await fetch(`${args.server}/auth/access?room=${encodeURIComponent(room)}`, {
+      method: "PUT",
+      headers: { Authorization: `Bearer ${editor}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ password: args.password, until: args.fino ?? null }),
+    }).catch(() => null);
+    if (!r) throw new Error(`Non riesco a collegarmi al server ${args.server} per impostare la password.`);
+    if (r.ok) return;
+    const motivo = ((await r.json().catch(() => null)) as { motivo?: string } | null)?.motivo ?? `HTTP ${r.status}`;
+    throw new Error(
+      r.status === 401 ? `Il server ha rifiutato la password di ${room} (${motivo}): BOARD_SECRET diverso da quello del server?` : `Password non impostata per ${room}: ${motivo}`,
+    );
+  }
+
   // 2. una board per gruppo
   const skipped = new Set<number>();
   const done: string[] = [];
@@ -203,23 +219,25 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
       const room = groupRoom(args.corso, g);
       const conn = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "editor", exp }, secret));
       try {
-        if (conn.els.length > 0) {
-          skipped.add(g);
-          continue;
+        if (conn.els.length > 0) skipped.add(g);
+        else {
+          for (const f of material.files) conn.send({ t: "files", files: [f] }); // un'immagine per messaggio (limite del server)
+          for (const chunk of chunkBySize(material.els)) conn.send({ t: "els", els: chunk });
         }
-        for (const f of material.files) conn.send({ t: "files", files: [f] }); // un'immagine per messaggio (limite del server)
-        for (const chunk of chunkBySize(material.els)) conn.send({ t: "els", els: chunk });
       } finally {
         await conn.close();
       }
-      // verifica: la board deve contenere ogni elemento (per id) e, aspettandole, ogni immagine
-      const check = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0, true);
-      const have = new Set(check.els.map((e) => e.id));
-      const lacking = material.els.filter((e) => !have.has(e.id)).length;
-      await check.close();
-      if (lacking) {
-        throw new Error(`La board ${room} non ha ricevuto tutto il materiale (mancano ${lacking} elementi su ${material.els.length}). Può essere rimasta a metà: usa un altro nome per il corso.`);
+      if (!skipped.has(g)) {
+        // verifica: la board deve contenere ogni elemento (per id) e, aspettandole, ogni immagine
+        const check = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0, true);
+        const have = new Set(check.els.map((e) => e.id));
+        const lacking = material.els.filter((e) => !have.has(e.id)).length;
+        await check.close();
+        if (lacking) {
+          throw new Error(`La board ${room} non ha ricevuto tutto il materiale (mancano ${lacking} elementi su ${material.els.length}). Può essere rimasta a metà: usa un altro nome per il corso.`);
+        }
       }
+      if (args.password !== undefined) await applyAccess(room); // anche sulle board già piene: rilanciare serve a cambiare la password
       done.push(room);
     }
   } catch (e) {
@@ -235,9 +253,12 @@ Board già preparate prima dell'errore: ${done.join(", ")} (rilanciando il coman
     out("");
     out(`Gruppo ${g} — ${room}${skipped.has(g) ? " (saltata: ha già del contenuto)" : ""}`);
     out(`  Trainer: ${link(room, args.trainer, "trainer", "editor")}`);
+    if (args.password !== undefined) {
+      out(`  Allievi (accesso con password della sessione${args.fino ? `, fino al ${new Date(args.fino).toLocaleDateString("it-IT")}` : ""}): ${args.base}/b/${room}`);
+    }
     if (students) {
-      for (const s of students.filter((s) => s.group === g)) out(`  ${s.name}: ${link(room, s.name, s.uid, "participant")}`);
-    } else {
+      for (const s of students.filter((s) => s.group === g)) out(`  ${s.name} (link personale): ${link(room, s.name, s.uid, "participant")}`);
+    } else if (args.password === undefined) {
       out(`  Allievi (link di gruppo, condividono identità e puntini): ${link(room, `Gruppo ${g}`, `g${g}`, "participant")}`);
     }
   }
