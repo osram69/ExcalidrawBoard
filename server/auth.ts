@@ -22,16 +22,46 @@ export function signToken(p: TokenPayload, secret: string): string {
   return `${body}.${mac(secret, body)}`;
 }
 
-export function verifyToken(token: string | null | undefined, secret: string): TokenPayload | null {
-  const [body, sig] = String(token || "").split(".");
-  if (!body || !sig) return null;
+/** Firma, formato e campi del token, senza guardare scadenza né board. `null` se qualcosa non va. */
+function readSigned(token: string | null | undefined, secret: string): TokenPayload | null {
+  const [body, sig, extra] = String(token || "").split(".");
+  if (!body || !sig || extra !== undefined) return null;
   const good = mac(secret, body);
   if (sig.length !== good.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good))) return null;
   try {
     const p = JSON.parse(Buffer.from(body, "base64url").toString()) as TokenPayload;
-    if (!ROOM_ID.test(p.room) || !["editor", "viewer", "participant"].includes(p.role) || !(p.exp > Date.now())) return null;
+    if (!p || typeof p !== "object" || typeof p.room !== "string" || !ROOM_ID.test(p.room) || !["editor", "viewer", "participant"].includes(p.role)) return null;
+    if (typeof p.exp !== "number" || !Number.isFinite(p.exp)) return null;
     const uid = typeof p.uid === "string" && /^[\w.@-]{1,64}$/.test(p.uid) ? p.uid : undefined;
     return { room: p.room, name: String(p.name || "Ospite").slice(0, 60), uid, role: p.role, exp: p.exp };
+  } catch {
+    return null;
+  }
+}
+
+export function verifyToken(token: string | null | undefined, secret: string): TokenPayload | null {
+  const p = readSigned(token, secret);
+  return p && p.exp > Date.now() ? p : null;
+}
+
+export type TokenCheck = { ok: true; payload: TokenPayload } | { ok: false; motivo: "scaduto" | "altra board" | "non valido" };
+
+/** Come `verifyToken`, ma per la board `room` e con il motivo del rifiuto (serve a guidare l'utente: login di nuovo, link sbagliato…). */
+export function inspectToken(token: string | null | undefined, room: string, secret: string, now = Date.now()): TokenCheck {
+  const p = readSigned(token, secret);
+  if (!p) return { ok: false, motivo: "non valido" };
+  if (p.room !== room) return { ok: false, motivo: "altra board" };
+  if (!(p.exp > now)) return { ok: false, motivo: "scaduto" };
+  return { ok: true, payload: p };
+}
+
+/** Indirizzo del login del backend (`LOGIN_URL`): solo http(s) completo; altrimenti `null` (nessun reindirizzamento). */
+export function parseLoginUrl(raw: string | undefined): string | null {
+  const v = (raw ?? "").trim();
+  if (!v) return null;
+  try {
+    const u = new URL(v);
+    return u.protocol === "http:" || u.protocol === "https:" ? v : null;
   } catch {
     return null;
   }

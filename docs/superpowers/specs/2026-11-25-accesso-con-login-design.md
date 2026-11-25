@@ -33,6 +33,15 @@ Account, password, registrazione o recupero credenziali sulla board. Revoca di u
 - Senza `LOGIN_URL` il comportamento resta quello di oggi (pagina "Link non valido o scaduto").
 - I controlli veri restano sul server; il client fa solo da guida.
 
+## Contesto di installazione
+
+- **La board gira su un Raspberry in ufficio** (Docker, esposta con Cloudflare Tunnel); **il sito Cube Academy resta l'app Next.js su Hostinger**. Server diversi, domini diversi.
+- Il collegamento è solo il **reindirizzamento del browser** (board → login sul sito → board con il token) più il **segreto condiviso** `BOARD_SECRET` (nelle variabili d'ambiente di entrambi). Nessuna chiamata da server a server: Hostinger non deve raggiungere l'ufficio, e la board non deve raggiungere Hostinger. Quindi nessun problema di CORS e nessuna porta da aprire.
+- Il cookie di login vive sul dominio del sito; la board non lo vede e non ne ha bisogno: tiene solo il token firmato nella sessione del browser (come oggi).
+- **Il backend deve accettare `return` solo verso l'indirizzo della board** (lista consentita, es. variabile `BOARD_URL`): senza questo controllo, un link costruito ad arte porterebbe il token di un utente a un sito qualsiasi. Il documento lo presenta come regola obbligatoria.
+- Le scadenze dei token sono controllate dall'orologio del Raspberry: serve che sia sincronizzato (NTP, attivo di default su Raspberry Pi OS); il documento lo ricorda.
+- Se il Raspberry o il tunnel sono spenti, il login sul sito funziona ma la board non è raggiungibile: la pagina di ritorno mostra l'errore del browser, nessuna gestione speciale.
+
 ## Approcci considerati
 
 - **Reindirizzamento al login del backend (scelto):** nessun account sulla board, il backend resta l'unica fonte di verità sulle iscrizioni.
