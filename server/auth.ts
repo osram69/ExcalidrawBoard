@@ -64,7 +64,10 @@ export function normalizeEmail(raw: unknown): string | null {
   return e.length <= 120 && /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@.]{2,}$/.test(e) ? e : null;
 }
 
-/** Identificativo stabile di una persona a partire dalla mail, senza mostrare la mail agli altri (finisce in cursori e proprietà degli oggetti). */
-export function personalUid(email: string): string {
-  return `u-${crypto.createHash("sha256").update(email).digest("hex").slice(0, 20)}`;
+/**
+ * Identificativo stabile di una persona a partire dalla mail, senza mostrare la mail agli altri (finisce in cursori e proprietà degli oggetti).
+ * È un HMAC con il segreto del server: senza di esso nessuno può calcolare l'identificativo di una mail nota e scoprire chi c'è nella board.
+ */
+export function personalUid(email: string, secret: string): string {
+  return `u-${crypto.createHmac("sha256", secret).update(`uid:${email}`).digest("hex").slice(0, 20)}`;
 }

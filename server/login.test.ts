@@ -67,7 +67,7 @@ test("/auth/login: token personale con nome, mail e uid derivato", async () => {
   if (!c.ok) return;
   assert.equal(c.payload.role, "participant");
   assert.equal(c.payload.email, "anna.rossi@esempio.it");
-  assert.equal(c.payload.uid, personalUid("anna.rossi@esempio.it"));
+  assert.equal(c.payload.uid, personalUid("anna.rossi@esempio.it", SECRET));
   assert.ok(Math.abs(c.payload.exp - (Date.now() + 12 * 3600e3)) < 10_000);
   assert.equal(j.exp, c.payload.exp);
 });
@@ -141,7 +141,7 @@ test("il token ottenuto con il login è accettato dal WebSocket e porta nome e u
   });
   assert.equal(init.me.name, "Anna Rossi");
   assert.equal(init.me.role, "participant");
-  assert.equal(init.me.key, personalUid("anna.rossi@esempio.it"));
+  assert.equal(init.me.key, personalUid("anna.rossi@esempio.it", SECRET));
   ws.close();
 });
 
@@ -190,4 +190,41 @@ test("un token valido a lungo non viene chiuso", async () => {
   await new Promise((r) => setTimeout(r, 500));
   assert.equal(ws.readyState, WebSocket.OPEN);
   ws.close();
+});
+
+const loginAs = (room: string, email: string, password: string) => login(room, { email, password });
+
+test("una classe dietro la stessa rete: 10 allievi sbagliano una volta, l'undicesimo con la password giusta entra", async () => {
+  const room = "nat1";
+  await setAccess(room, { password: "dicembre-2026" });
+  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, `allievo${i}@esempio.it`, "sbagliata-123")).status, 401);
+  assert.equal((await loginAs(room, "undicesimo@esempio.it", "dicembre-2026")).status, 200);
+});
+
+test("lo stesso indirizzo email dopo 10 errori è bloccato, un'altra mail no", async () => {
+  const room = "nat2";
+  await setAccess(room, { password: "dicembre-2026" });
+  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, "bersaglio@esempio.it", `sbagliata-${i}`)).status, 401);
+  assert.equal((await loginAs(room, "bersaglio@esempio.it", "dicembre-2026")).status, 429);
+  assert.equal((await loginAs(room, "altra@esempio.it", "dicembre-2026")).status, 200);
+});
+
+test("board senza accesso configurato: sempre 401, mai 429 (nessun contatore da riempire)", async () => {
+  for (let i = 0; i < 15; i++) assert.equal((await loginAs("mai-configurata", `x${i}@esempio.it`, "qualsiasi-123")).status, 401);
+});
+
+test("mentre arrivano molti login il server resta reattivo (la verifica non blocca il ciclo degli eventi)", async () => {
+  const room = "carico1";
+  await setAccess(room, { password: "dicembre-2026" });
+  const flood = Array.from({ length: 12 }, (_, i) => loginAs(room, `carico${i}@esempio.it`, "sbagliata-123"));
+  let worst = 0;
+  for (let i = 0; i < 6; i++) {
+    const t0 = Date.now();
+    await fetch(`${srv.url}/health`);
+    worst = Math.max(worst, Date.now() - t0);
+    await new Promise((r) => setTimeout(r, 40));
+  }
+  const res = await Promise.all(flood);
+  assert.ok(res.every((r) => [401, 429, 503].includes(r.status)), res.map((r) => r.status).join(","));
+  assert.ok(worst < 250, `il server ha risposto a /health dopo ${worst} ms`);
 });

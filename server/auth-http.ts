@@ -6,7 +6,7 @@
 import type http from "node:http";
 import path from "node:path";
 import { inspectToken, personalUid, ROOM_ID, signToken } from "./auth.ts";
-import { AttemptLimiter, hashPassword, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess } from "./access.ts";
+import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess } from "./access.ts";
 
 export interface AuthOptions {
   secret: string;
@@ -16,7 +16,7 @@ export interface AuthOptions {
 }
 
 const MAX_BODY = 4096;
-const DUMMY = hashPassword("password-finta-per-pareggiare-i-tempi"); // chi prova una board senza accesso impiega lo stesso tempo
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const json = (res: http.ServerResponse, status: number, body: unknown) => {
   res.writeHead(status, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" });
@@ -62,7 +62,10 @@ function readJson(req: http.IncomingMessage): Promise<unknown> {
 
 /** Gestisce le rotte /auth/…; restituisce `true` se la richiesta era di questo gruppo. */
 export function createAuthHandler(opts: AuthOptions) {
-  const limiter = new AttemptLimiter();
+  const personLimit = new AttemptLimiter(10); // per indirizzo + board + email
+  const netLimit = new AttemptLimiter(100); // per indirizzo + board
+  const roomLimit = new AttemptLimiter(500); // per board: oltre, si rallenta (non si blocca)
+  const gate = new ConcurrencyGate(4); // verifiche della password in corso insieme
   const roomDir = (room: string) => path.join(opts.dataDir, "rooms", room);
 
   async function body(req: http.IncomingMessage, res: http.ServerResponse): Promise<unknown | undefined> {
@@ -80,19 +83,33 @@ export function createAuthHandler(opts: AuthOptions) {
     if (raw === undefined) return;
     const b = parseLoginBody(raw);
     if (!b.ok) return fail(res, b.status, b.motivo);
-    const key = `${clientIp(req)}|${b.room}`;
-    if (limiter.blocked(key)) return fail(res, 429, "Troppi tentativi: riprova tra qualche minuto.");
+    const WRONG = "Password non corretta, oppure questa board non ha un accesso con password.";
     const access = readAccess(roomDir(b.room));
-    const ok = verifyPassword(b.password, access ? access.passwordHash : DUMMY) && !!access;
-    if (!ok) {
-      limiter.fail(key);
-      return fail(res, 401, "Password non corretta, oppure questa board non ha un accesso con password.");
+    if (!access) return fail(res, 401, WRONG); // niente da verificare e nessun contatore da riempire: i nomi delle board sono pubblici nei link
+    // Limiti: per persona (indirizzo, board, email: 10) e per rete (indirizzo, board: 100, così una classe dietro lo stesso indirizzo non si blocca a vicenda).
+    const net = `${normalizeIp(clientIp(req))}|${b.room}`;
+    const person = `${net}|${b.email}`;
+    if (personLimit.blocked(person) || netLimit.blocked(net)) return fail(res, 429, "Troppi tentativi: riprova tra qualche minuto.");
+    if (!gate.tryEnter()) return fail(res, 503, "Il server è occupato: riprova tra qualche secondo.");
+    // Il tentativo si conta PRIMA di verificare (richieste in parallelo non lo aggirano) e si restituisce se la password è giusta.
+    personLimit.fail(person);
+    netLimit.fail(net);
+    roomLimit.fail(b.room);
+    let ok = false;
+    try {
+      if (roomLimit.blocked(b.room)) await sleep(1000); // troppi errori sulla board: si rallenta chiunque, senza bloccare nessuno
+      ok = await verifyPassword(b.password, access.passwordHash);
+    } finally {
+      gate.leave();
     }
-    limiter.clear(key);
+    if (!ok) return fail(res, 401, WRONG);
+    personLimit.clear(person);
+    netLimit.refund(net);
+    roomLimit.refund(b.room);
     const now = Date.now();
-    if (access!.until !== null && access!.until <= now) return fail(res, 403, "La sessione è terminata.");
-    const exp = sessionExp(now, access!.until, b.ricordami, opts.hours, opts.days);
-    const token = signToken({ room: b.room, name: b.name, uid: personalUid(b.email), email: b.email, role: "participant", exp }, opts.secret);
+    if (access.until !== null && access.until <= now) return fail(res, 403, "La sessione è terminata.");
+    const exp = sessionExp(now, access.until, b.ricordami, opts.hours, opts.days);
+    const token = signToken({ room: b.room, name: b.name, uid: personalUid(b.email, opts.secret), email: b.email, role: "participant", exp }, opts.secret);
     json(res, 200, { ok: true, token, name: b.name, exp });
   }
 

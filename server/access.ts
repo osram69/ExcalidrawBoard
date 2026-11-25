@@ -3,6 +3,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { promisify } from "node:util";
 import { normalizeEmail, ROOM_ID } from "./auth.ts";
 
 export interface RoomAccess {
@@ -18,13 +19,16 @@ export function hashPassword(pw: string): string {
   return `scrypt$${b64(salt)}$${b64(crypto.scryptSync(pw, salt, KEYLEN))}`;
 }
 
-export function verifyPassword(pw: string, stored: string): boolean {
+const scryptAsync = promisify(crypto.scrypt) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
+
+/** Verifica asincrona: lo scrypt gira nel pool di thread e non blocca il ciclo degli eventi (le board di tutti sono sullo stesso). */
+export async function verifyPassword(pw: string, stored: string): Promise<boolean> {
   const [kind, salt, hash, extra] = String(stored ?? "").split("$");
   if (kind !== "scrypt" || !salt || !hash || extra !== undefined) return false;
   try {
     const expected = Buffer.from(hash, "base64url");
     if (!expected.length) return false;
-    const got = crypto.scryptSync(String(pw ?? ""), Buffer.from(salt, "base64url"), expected.length);
+    const got = await scryptAsync(String(pw ?? ""), Buffer.from(salt, "base64url"), expected.length);
     return crypto.timingSafeEqual(got, expected);
   } catch {
     return false;
@@ -57,7 +61,11 @@ export function writeAccess(dir: string, a: RoomAccess): void {
 /** Dopo `max` errori entro `windowMs` per la stessa chiave, `blocked` è vero fino allo scadere della finestra. */
 export class AttemptLimiter {
   private hits = new Map<string, { n: number; t: number }>();
-  constructor(private max = 10, private windowMs = 10 * 60_000, private now: () => number = Date.now) {}
+  constructor(private max = 10, private windowMs = 10 * 60_000, private now: () => number = Date.now, private maxKeys = 5000) {}
+
+  get size(): number {
+    return this.hits.size;
+  }
 
   blocked(key: string): boolean {
     const h = this.hits.get(key);
@@ -68,12 +76,65 @@ export class AttemptLimiter {
     const h = this.hits.get(key);
     if (h && this.now() - h.t < this.windowMs) h.n++;
     else this.hits.set(key, { n: 1, t: this.now() });
-    if (this.hits.size > 5000) this.hits.clear();
+    if (this.hits.size > this.maxKeys) this.evict();
+  }
+
+  /** Toglie un tentativo (per i tentativi contati prima della verifica e poi risultati giusti). */
+  refund(key: string): void {
+    const h = this.hits.get(key);
+    if (!h) return;
+    if (--h.n <= 0) this.hits.delete(key);
   }
 
   clear(key: string): void {
     this.hits.delete(key);
   }
+
+  /**
+   * Troppe chiavi: via prima quelle scadute, poi quelle non ancora bloccate (le più vecchie per prime) e solo in ultimo i blocchi.
+   * Mai tutto insieme: inondare di chiavi inutili non deve azzerare un blocco attivo.
+   */
+  private evict(): void {
+    const now = this.now();
+    for (const [k, h] of this.hits) if (now - h.t >= this.windowMs) this.hits.delete(k);
+    for (const [k, h] of this.hits) {
+      if (this.hits.size <= this.maxKeys) return;
+      if (h.n < this.max) this.hits.delete(k);
+    }
+    for (const k of this.hits.keys()) {
+      if (this.hits.size <= this.maxKeys) return;
+      this.hits.delete(k);
+    }
+  }
+}
+
+/** Al massimo `max` verifiche della password in corso insieme: le altre ricevono "occupato" invece di accumularsi. */
+export class ConcurrencyGate {
+  private active = 0;
+  constructor(private max: number) {}
+
+  tryEnter(): boolean {
+    if (this.active >= this.max) return false;
+    this.active++;
+    return true;
+  }
+
+  leave(): void {
+    if (this.active > 0) this.active--;
+  }
+}
+
+/** Chiave per i limiti: IPv4 invariato, IPv4-mappato ridotto, IPv6 ridotto al prefisso /64 (chi ha una rete /64 ha miliardi di indirizzi). */
+export function normalizeIp(ip: string): string {
+  const mapped = /^::ffff:(\d+\.\d+\.\d+\.\d+)$/i.exec(ip);
+  if (mapped) return mapped[1];
+  if (!ip.includes(":")) return ip;
+  const [head, tail = ""] = ip.split("::");
+  const a = head ? head.split(":") : [];
+  const b = ip.includes("::") && tail ? tail.split(":") : [];
+  const groups = ip.includes("::") ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b] : a;
+  if (groups.length !== 8 || groups.some((g) => !/^[0-9a-f]{1,4}$/i.test(g))) return ip;
+  return `v6:${groups.slice(0, 4).map((g) => g.toLowerCase().padStart(4, "0")).join(":")}`;
 }
 
 /** Scadenza dell'accesso: ore normali oppure, con "ricordami", giorni; mai oltre la fine della sessione. */

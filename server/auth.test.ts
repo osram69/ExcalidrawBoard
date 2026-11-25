@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { test } from "node:test";
 import { inspectToken, normalizeEmail, personalUid, signToken, verifyToken, type TokenPayload } from "./auth.ts";
 
@@ -54,12 +55,15 @@ test("normalizeEmail: minuscola, senza spazi, solo indirizzi plausibili", () => 
   }
 });
 
-test("personalUid: stabile, valido per il server e senza mostrare la mail", () => {
-  const a = personalUid("anna.rossi@esempio.it");
-  assert.equal(a, personalUid("anna.rossi@esempio.it"));
-  assert.notEqual(a, personalUid("marco.bianchi@esempio.it"));
+test("personalUid: stabile, valido per il server, senza mostrare la mail e non calcolabile senza il segreto", () => {
+  const a = personalUid("anna.rossi@esempio.it", SECRET);
+  assert.equal(a, personalUid("anna.rossi@esempio.it", SECRET));
+  assert.notEqual(a, personalUid("marco.bianchi@esempio.it", SECRET));
+  assert.notEqual(a, personalUid("anna.rossi@esempio.it", "altro-segreto"));
   assert.match(a, /^u-[0-9a-f]{20}$/);
   assert.ok(!a.includes("anna"));
+  // l'impronta semplice (SHA-256 della mail), che chiunque potrebbe calcolare, NON deve coincidere
+  assert.notEqual(a, "u-" + createHash("sha256").update("anna.rossi@esempio.it").digest("hex").slice(0, 20));
 });
 
 test("l'email firmata nel token viene letta; un'email non valida viene scartata", () => {
