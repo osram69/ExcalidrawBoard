@@ -14,7 +14,7 @@ services:
     volumes:
       - ./data:/data # board e immagini: sopravvivono a ricostruzioni e aggiornamenti
     ports:
-      - "127.0.0.1:3030:3030" # solo dalla macchina stessa (prove); il tunnel usa la rete interna, non questa porta
+      - "127.0.0.1:${BOARD_PORT:-3030}:3030" # solo dalla macchina stessa (prove, Tailscale); il tunnel Cloudflare usa la rete interna. Porta cambiabile con BOARD_PORT nel .env
     # limiti per non togliere risorse a Home Assistant e Jellyfin che girano sullo stesso Raspberry
     mem_limit: 768m
     cpus: 2

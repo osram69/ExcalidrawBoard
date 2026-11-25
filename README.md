@@ -138,8 +138,30 @@ Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanz
 
 ## Sul Raspberry (Docker)
 
-Come la variante tldraw: `.env` con `BOARD_SECRET`, `mkdir -p data && sudo chown 1000:1000 data`, `docker compose up -d --build`.
-Se la porta 3030 è già usata dall'altra board, cambia `3030:3030` nel compose (ad esempio `3031:3030`).
+Serve un Raspberry Pi 4 o 5 con sistema a 64 bit e Docker (se ci gira già un'altra board in Docker, c'è già). I comandi sono da eseguire sul Raspberry, via ssh, nella cartella del progetto.
+
+1. **Scarica il codice:** `git clone https://github.com/osram69/ExcalidrawBoard.git && cd ExcalidrawBoard` (se il repository è privato, git chiede nome utente e un *token* personale di GitHub al posto della password).
+2. **Crea il file `.env`** (`nano .env`):
+
+   ```
+   BOARD_SECRET=<stringa lunga e casuale: openssl rand -hex 32>
+   BOARD_PORT=3031                # solo se la 3030 è già usata da un'altra board
+   TRAINER_LOGIN_URL=https://cubeacademy.eu/materiali/board   # solo per l'accesso del trainer con l'account del sito
+   TUNNEL_TOKEN=<token del tunnel Cloudflare>                 # solo se usi Cloudflare (vedi sotto)
+   ```
+
+   Con lo stesso `BOARD_SECRET` dell'altra variante (tldraw) i link firmati di entrambe restano validi.
+3. **Cartella dei dati:** `mkdir -p data && sudo chown 1000:1000 data` (qui stanno le board e le immagini: è la cartella di cui fare il backup).
+4. **Avvia:** `docker compose up -d --build`. La prima volta la costruzione dell'immagine richiede alcuni minuti.
+5. **Controlla:** `docker compose ps` (deve risultare "healthy") e `curl localhost:3031/health` (o la porta scelta). In caso di problemi: `docker compose logs -f board`.
+6. **Rendi la board raggiungibile da fuori**, con uno di questi modi (la board ascolta solo su `127.0.0.1`: non è esposta da sola):
+   - **Cloudflare Tunnel** (consigliato per le lezioni, indirizzo con il tuo dominio): crea un tunnel in Cloudflare Zero Trust (*Networks → Tunnels*), metti il token in `.env` come `TUNNEL_TOKEN`, imposta come *Public hostname* il servizio \`http://board:3030\` e avvia con `docker compose --profile tunnel up -d`.
+   - **Tailscale** (comodo per le prove): `sudo tailscale serve --bg 3031` la rende visibile solo ai dispositivi della tua rete Tailscale; `sudo tailscale funnel --bg 3031` la rende pubblica su un indirizzo `https://<nome>.<rete>.ts.net` (la sintassi cambia un po' tra le versioni: `tailscale serve --help`). Qui non serve il container del tunnel.
+7. **Primo accesso come trainer:** con il pulsante "Accedi come trainer" (se il sito è configurato, vedi `docs/accesso-cube-academy.md`) oppure con un link firmato creato dal tuo PC, senza installare Node sul Raspberry:
+   `npm run token -- lezione1 "Trainer" editor 12 https://<indirizzo pubblico> trainer` (con `BOARD_SECRET` uguale a quello del Raspberry; in PowerShell usa `npm.cmd` e imposta prima `$env:BOARD_SECRET`).
+
+**Aggiornare:** `git pull && docker compose up -d --build`. **Backup:** copia la cartella `data/`. **Fermare:** `docker compose down` (i dati restano in `data/`).
+Il compose limita la board a 768 MB e 2 processori per non togliere risorse ad altri servizi (Home Assistant, Jellyfin…). L'orologio del Raspberry deve essere sincronizzato (NTP, attivo di default su Raspberry Pi OS).
 
 ## Limiti rispetto a tldraw
 
