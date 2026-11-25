@@ -218,3 +218,79 @@ test("errore a metà: si dice quali board erano già state preparate", async () 
   assert.ok(text.includes("corso9-g1") && /già preparate/.test(text), text);
   assert.ok(!text.includes("corso9-g3"), "il gruppo 3 non è stato toccato");
 });
+
+/** Proxy TCP che rallenta le risposte del server (~2 MB/s): simula un server remoto. */
+function slowProxy(targetPort: number): Promise<{ port: number; close(): void }> {
+  return new Promise((resolve) => {
+    const sockets = new Set<net.Socket>();
+    const srv = net.createServer((client) => {
+      const up = net.connect(targetPort, "127.0.0.1");
+      sockets.add(client);
+      sockets.add(up);
+      client.pipe(up);
+      let queue = Buffer.alloc(0);
+      let upClosed = false;
+      const end = () => {
+        clearInterval(timer);
+        client.destroy();
+        up.destroy();
+      };
+      const timer = setInterval(() => {
+        if (queue.length) {
+          client.write(queue.subarray(0, 32768));
+          queue = queue.subarray(32768);
+        } else if (upClosed) end();
+      }, 15);
+      up.on("data", (d: Buffer) => (queue = Buffer.concat([queue, d])));
+      up.on("close", () => (upClosed = true));
+      client.on("close", end);
+      client.on("error", () => {});
+      up.on("error", () => {});
+    }).listen(0, () => resolve({ port: (srv.address() as net.AddressInfo).port, close: () => { for (const s of sockets) s.destroy(); srv.close(); } }));
+  });
+}
+
+test("copia di una board con un'immagine grande su un collegamento lento: arriva anche il file", async () => {
+  const src = "lenta1";
+  const big = "data:image/png;base64," + "A".repeat(3 * 1024 * 1024);
+  const t = await connectBoard(url, src, token(src, "editor", "trainer"));
+  t.send({ t: "files", files: [{ id: "big1", mimeType: "image/png", dataURL: big, created: 1 }] });
+  t.send({ t: "els", els: [rect("img1", { type: "image", fileId: "big1", status: "saved" })] });
+  await t.close();
+  const proxy = await slowProxy(Number(new URL(url).port));
+  try {
+    const out: string[] = [];
+    const code = await main(["corso10", "2", `board:${src}`, "--server", `http://localhost:${proxy.port}`], env, (l) => out.push(l));
+    assert.equal(code, 0, out.join("\n"));
+  } finally {
+    proxy.close();
+  }
+  for (const g of [1, 2]) {
+    const room = `corso10-g${g}`;
+    const v = await connectBoard(url, room, token(room, "viewer"), 1500);
+    assert.equal(v.els.length, 1);
+    assert.deepEqual(v.files.map((f: any) => f.id), ["big1"], `${room}: manca il file dell'immagine`);
+    await v.close();
+  }
+});
+
+test("copia di una board con più di 5000 elementi: arrivano tutti", async () => {
+  const src = "grande2";
+  const t = await connectBoard(url, src, token(src, "editor", "trainer"));
+  for (let i = 0; i < 6; i++) t.send({ t: "els", els: Array.from({ length: 1000 }, (_, k) => rect(`e${i}-${k}`)) });
+  await new Promise((r) => setTimeout(r, 500));
+  await t.close();
+  const { code, text } = await run(["corso11", "1", `board:${src}`]);
+  assert.equal(code, 0, text);
+  const v = await connectBoard(url, "corso11-g1", token("corso11-g1", "viewer"));
+  assert.equal(v.els.length, 6000);
+  await v.close();
+});
+
+test("segreto sbagliato: errore chiaro che nomina BOARD_SECRET, nessuna board creata", async () => {
+  const out: string[] = [];
+  const code = await main(["corso12", "2", pngFile("ok12.png"), "--server", url], { BOARD_SECRET: "un-altro-segreto" } as NodeJS.ProcessEnv, (l) => out.push(l));
+  assert.equal(code, 1);
+  assert.match(out.join("\n"), /BOARD_SECRET/);
+  assert.equal(roomDirs().filter((d) => d.startsWith("corso12-")).length, 0);
+});

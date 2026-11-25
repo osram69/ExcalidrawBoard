@@ -22,6 +22,17 @@ export function groupRoom(corso: string, n: number): string {
 
 const USO = 'Uso: npm run seed -- <corso> <gruppi> <immagine | board:ID> [--server URL] [--base URL] [--ore N] [--trainer "Nome"] [--allievi file]';
 
+/** Indirizzo http(s) completo, senza `/` finali: senza lo schema i link stampati non funzionerebbero. */
+function cleanUrl(v: string, opt: string): string | { errore: string } {
+  try {
+    const u = new URL(v);
+    if (u.protocol === "http:" || u.protocol === "https:") return v.replace(/\/+$/, "");
+  } catch {
+    /* non è un indirizzo */
+  }
+  return { errore: `${opt} deve essere un indirizzo completo che inizia con http:// o https:// (ricevuto: ${v}).` };
+}
+
 /** Legge gli argomenti: tre posizionali (corso, gruppi, materiale) e le opzioni con valore. */
 export function parseArgs(argv: string[]): SeedArgs | { errore: string } {
   const pos: string[] = [];
@@ -51,10 +62,12 @@ export function parseArgs(argv: string[]): SeedArgs | { errore: string } {
   } else materiale = { tipo: "immagine", percorso: mat };
   const ore = opt["--ore"] === undefined ? 12 : Number(opt["--ore"]);
   if (!Number.isFinite(ore) || ore <= 0) return { errore: "--ore deve essere un numero maggiore di zero." };
-  const server = (opt["--server"] ?? "http://localhost:3030").replace(/\/+$/, "");
+  const server = cleanUrl(opt["--server"] ?? "http://localhost:3030", "--server");
+  if (typeof server !== "string") return server;
+  const base = cleanUrl(opt["--base"] ?? server, "--base");
+  if (typeof base !== "string") return base;
   return {
-    corso, gruppi, materiale, server,
-    base: (opt["--base"] ?? server).replace(/\/+$/, ""),
+    corso, gruppi, materiale, server, base,
     ore,
     trainer: opt["--trainer"] ?? "Trainer",
     ...(opt["--allievi"] !== undefined ? { allievi: opt["--allievi"] } : {}),
@@ -90,7 +103,7 @@ export function assignStudents(lines: string[], gruppi: number): { ok: Student[]
   }
   const counts = Array<number>(gruppi + 1).fill(0);
   for (const r of rows) if (r.group) counts[r.group]++;
-  const used = new Set<string>();
+  const used = new Set<string>(["trainer"]); // riservato: è l'uid che possiede il materiale (e ha il link da trainer)
   const ok = rows.map((r): Student => {
     let group = r.group;
     if (!group) {

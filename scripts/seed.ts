@@ -9,6 +9,7 @@ import { signToken, type Role } from "../server/auth.ts";
 import { assignStudents, buildImageScene, groupRoom, imageInfo, parseArgs, type SeedArgs, type Student } from "./seed-lib.ts";
 
 const MAX_DATAURL = 10 * 1024 * 1024; // stesso limite per immagine del server
+const MAX_ELS_PER_MESSAGE = 1000; // ben sotto il limite di 5000 del server
 const MAX_CHUNK = 4 * 1024 * 1024; // un messaggio di elementi non supera ~4 MB (il server accetta fino a 16 MB)
 
 export interface BoardConn {
@@ -19,8 +20,14 @@ export interface BoardConn {
   close(): Promise<void>;
 }
 
-/** Si collega a una board e attende lo stato iniziale (elementi e, entro `settleMs`, le immagini). */
-export function connectBoard(server: string, room: string, token: string, settleMs = 400): Promise<BoardConn> {
+const FILES_TIMEOUT_MS = 60_000; // attesa massima delle immagini di una board
+
+/**
+ * Si collega a una board e attende lo stato iniziale: gli elementi e le immagini (che arrivano dopo, un messaggio ciascuna).
+ * Con `waitFiles` attende anche che sia arrivata l'immagine di ogni elemento immagine, senza fermarsi a un tempo fisso:
+ * su un collegamento lento un'immagine da 10 MB impiega ben più di `settleMs`. Se non arrivano entro 60 secondi, errore.
+ */
+export function connectBoard(server: string, room: string, token: string, settleMs = 400, waitFiles = false): Promise<BoardConn> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`${server.replace(/^http/, "ws")}/connect/${encodeURIComponent(room)}?t=${encodeURIComponent(token)}`);
     const conn: BoardConn = {
@@ -38,22 +45,31 @@ export function connectBoard(server: string, room: string, token: string, settle
     let ready = false;
     let settled = false;
     let timer: NodeJS.Timeout | undefined;
+    let deadline: NodeJS.Timeout | undefined;
+    let needed: string[] = [];
+    const fail = (err: Error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      clearTimeout(deadline);
+      reject(err);
+    };
+    const missing = () => needed.filter((id) => !conn.files.some((f) => f.id === id));
     const settle = () => {
+      clearTimeout(timer);
+      if (missing().length) return; // si aspetta ancora qualche immagine
       timer = setTimeout(() => {
         settled = true;
+        clearTimeout(deadline);
         resolve(conn);
       }, settleMs);
     };
     ws.on("unexpected-response", (_req, res) => {
-      reject(new Error(`Il server ha rifiutato il collegamento alla board ${room} (HTTP ${res.statusCode}): link non valido o BOARD_SECRET diverso da quello del server.`));
+      fail(new Error(`Il server ha rifiutato il collegamento alla board ${room} (HTTP ${res.statusCode}): link non valido o BOARD_SECRET diverso da quello del server.`));
       ws.terminate();
     });
-    ws.on("error", (e: any) => {
-      if (!settled) reject(new Error(`Non riesco a collegarmi al server ${server} (${e?.code ?? e?.message ?? "errore di rete"}).`));
-    });
-    ws.on("close", () => {
-      if (!settled) reject(new Error(`Il collegamento al server ${server} si è chiuso prima del tempo.`));
-    });
+    ws.on("error", (e: any) => fail(new Error(`Non riesco a collegarmi al server ${server} (${e?.code ?? e?.message ?? "errore di rete"}).`)));
+    ws.on("close", () => fail(new Error(`Il collegamento al server ${server} si è chiuso prima del tempo.`)));
     ws.on("message", (data) => {
       let m: any;
       try {
@@ -65,6 +81,11 @@ export function connectBoard(server: string, room: string, token: string, settle
         if (m.t !== "init") return;
         ready = true;
         conn.els = m.els;
+        if (waitFiles) needed = [...new Set<string>(m.els.filter((e: any) => !e.isDeleted && e.type === "image" && e.fileId).map((e: any) => e.fileId))];
+        deadline = setTimeout(() => {
+          fail(new Error(`Le immagini della board ${room} non sono arrivate entro ${FILES_TIMEOUT_MS / 1000} secondi (mancano: ${missing().join(", ")}).`));
+          ws.terminate();
+        }, FILES_TIMEOUT_MS);
         settle();
       } else if (!settled && m.t === "files") {
         conn.files.push(...m.files);
@@ -86,14 +107,14 @@ function secretFor(env: NodeJS.ProcessEnv): string {
   return "dev-secret-solo-per-prove";
 }
 
-/** Divide gli elementi in gruppi che stanno comodamente in un messaggio. */
+/** Divide gli elementi in gruppi che stanno comodamente in un messaggio: per dimensione e per numero (il server ne accetta al massimo 5000 per messaggio e scarta il resto). */
 function chunkBySize(els: any[]): any[][] {
   const out: any[][] = [];
   let cur: any[] = [];
   let size = 0;
   for (const e of els) {
     const n = JSON.stringify(e).length;
-    if (cur.length && size + n > MAX_CHUNK) {
+    if (cur.length && (size + n > MAX_CHUNK || cur.length >= MAX_ELS_PER_MESSAGE)) {
       out.push(cur);
       cur = [];
       size = 0;
@@ -170,7 +191,7 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
   }
   const exp = Date.now() + args.ore * 3600e3;
   const material = await loadMaterial(args, (room) =>
-    connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret)),
+    connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 400, true), // aspetta anche le immagini
   );
   const link = (room: string, name: string, uid: string, role: Role) => `${args.base}/b/${room}?t=${signToken({ room, name, uid, role, exp }, secret)}`;
 
@@ -191,10 +212,14 @@ async function seed(args: SeedArgs, secret: string, out: (line: string) => void,
       } finally {
         await conn.close();
       }
-      const check = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0);
-      const got = check.els.length;
+      // verifica: la board deve contenere ogni elemento (per id) e, aspettandole, ogni immagine
+      const check = await connect(args.server, room, signToken({ room, name: args.trainer, uid: "trainer", role: "viewer", exp }, secret), 0, true);
+      const have = new Set(check.els.map((e) => e.id));
+      const lacking = material.els.filter((e) => !have.has(e.id)).length;
       await check.close();
-      if (got < material.els.length) throw new Error(`La board ${room} non ha ricevuto tutto il materiale (${got} di ${material.els.length} elementi).`);
+      if (lacking) {
+        throw new Error(`La board ${room} non ha ricevuto tutto il materiale (mancano ${lacking} elementi su ${material.els.length}). Può essere rimasta a metà: usa un altro nome per il corso.`);
+      }
       done.push(room);
     }
   } catch (e) {

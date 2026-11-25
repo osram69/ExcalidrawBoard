@@ -161,3 +161,20 @@ test("buildImageScene: dimensioni non valide sono rifiutate", () => {
 test("groupRoom", () => {
   assert.equal(groupRoom("isaqb-dic26", 3), "isaqb-dic26-g3");
 });
+
+test("assignStudents: un allievo di nome 'Trainer' non prende l'uid del trainer", () => {
+  const r = ok(assignStudents(["Trainer", "Anna"], 2));
+  assert.notEqual(r.ok[0].uid, "trainer");
+  assert.equal(r.ok[0].uid, "trainer-2");
+  assert.equal(r.ok[1].uid, "anna");
+});
+
+test("parseArgs: --server e --base devono essere indirizzi http(s) completi", () => {
+  for (const [opt, v] of [["--server", "board.esempio.it"], ["--server", "localhost:3030"], ["--server", "ftp://x.org"], ["--base", "board.esempio.it"], ["--base", "//x.org"]]) {
+    const r: any = parseArgs(["corso", "2", "x.png", opt, v]);
+    assert.ok(typeof r.errore === "string" && r.errore.includes(opt), `${opt} ${v}`);
+  }
+  const a = ok(parseArgs(["corso", "2", "x.png", "--server", "https://x.org/", "--base", "http://localhost:5173//"]));
+  assert.equal(a.server, "https://x.org");
+  assert.equal(a.base, "http://localhost:5173");
+});
