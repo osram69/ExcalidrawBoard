@@ -54,7 +54,7 @@ Oggi la board ha note adesive, frame, foto, cursori live e tre ruoli (`editor` =
 
 | Direzione | Messaggio | Chi può | Effetto |
 |---|---|---|---|
-| client→server | `{t:"timer", action:"start"\|"pause"\|"resume"\|"reset", seconds?}` | solo `editor` | aggiorna il timer e lo ritrasmette |
+| client→server | `{t:"timer", action:"start"\|"pause"\|"resume"\|"extend"\|"reset", seconds?}` | solo `editor` | aggiorna il timer e lo ritrasmette (`extend` aggiunge `seconds` al conto; dopo la scadenza riparte da adesso) |
 | server→tutti | `{t:"timer", state:{status, endsAt, remainingMs, durationMs}, now}` | — | `now` è l'ora del server, serve a correggere lo scarto dell'orologio del client |
 | client→server | `{t:"vote-ctl", action:"open"\|"close"\|"reset", perPerson?}` | solo `editor` | apre/chiude/azzera la votazione (budget 1-20, predefinito 5) |
 | client→server | `{t:"vote", id, delta:+1\|-1}` | `editor` e `participant` | aggiunge/toglie un puntino alla nota `id` |
@@ -65,7 +65,7 @@ Oggi la board ha note adesive, frame, foto, cursori live e tre ruoli (`editor` =
 
 ### Timer
 
-- Stato per stanza nel server: `idle`, `running` (con `endsAt`), `paused` (con `remainingMs`). Non viene salvato su disco: un riavvio del server lo azzera (accettabile, le esercitazioni durano minuti).
+- Stato per stanza nel server: `idle`, `running` (con `endsAt`), `paused` (con `remainingMs`), `done` (scaduto, calcolato dal server quando `endsAt` è passato). Non viene salvato su disco: un riavvio del server lo azzera (accettabile, le esercitazioni durano minuti).
 - Allo scadere i client mostrano un lampeggio e un breve suono (Web Audio, con pulsante muto; i browser bloccano l'audio senza un gesto dell'utente, quindi il suono parte solo dopo il primo clic sulla pagina).
 - Interfaccia: pillola in alto al centro (mm:ss), visibile a tutti. Il trainer vede anche i comandi: preset 5/10/15/30 minuti, +1 min, pausa/riprendi, azzera.
 

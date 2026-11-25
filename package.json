@@ -10,7 +10,8 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "tsx server/index.ts",
-    "token": "node scripts/make-token.mjs"
+    "token": "node scripts/make-token.mjs",
+    "test": "node --import tsx --test \"server/**/*.test.ts\" \"src/**/*.test.ts\""
   },
   "engines": {
     "node": ">=22"

@@ -4,6 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import type { WebSocket } from "ws";
 import type { Role } from "./auth.ts";
+import { RoomTimer } from "./timer.ts";
 
 export interface El {
   id: string;
@@ -48,6 +49,7 @@ export class Room {
   readonly els = new Map<string, El>();
   readonly files = new Map<string, BinFile>();
   readonly peers = new Set<Peer>();
+  readonly timer = new RoomTimer();
   private saveTimer: NodeJS.Timeout | null = null;
   private dirtyFiles = new Set<string>();
   private idle: NodeJS.Timeout | null = null;

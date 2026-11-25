@@ -8,6 +8,7 @@ import http from "node:http";
 import path from "node:path";
 import { WebSocketServer } from "ws";
 import { ROOM_ID, verifyToken } from "./auth.ts";
+import { featureSnapshot, handleFeatureMessage } from "./features.ts";
 import { closeAllRooms, getRoom, openRooms, type Peer } from "./rooms.ts";
 
 try {
@@ -96,7 +97,7 @@ server.on("upgrade", (req, socket, head) => {
     const key = t.uid || `n:${t.name}`;
     const peer: Peer = { id: crypto.randomUUID(), ws, name: t.name, role: t.role, color: colorFor(key), key };
     const info = (p: Peer) => ({ id: p.id, name: p.name, color: p.color, role: p.role, key: p.key });
-    ws.send(JSON.stringify({ t: "init", me: info(peer), els: [...r.els.values()], peers: [...r.peers].map(info) }));
+    ws.send(JSON.stringify({ t: "init", me: info(peer), els: [...r.els.values()], peers: [...r.peers].map(info), ...featureSnapshot(r, peer) }));
     for (const f of r.files.values()) ws.send(JSON.stringify({ t: "files", files: [f] }));
     r.join(peer);
     r.broadcast({ t: "join", peer: info(peer) }, peer);
@@ -115,6 +116,7 @@ server.on("upgrade", (req, socket, head) => {
         r.broadcast({ t: "ptr", id: peer.id, x: n(msg.x), y: n(msg.y), tool: msg.tool === "laser" ? "laser" : "pointer", button: msg.button === "down" ? "down" : "up", sel: Array.isArray(msg.sel) ? msg.sel.filter((s: unknown) => typeof s === "string").slice(0, 50) : [] }, peer);
         return;
       }
+      if (handleFeatureMessage(r, peer, msg)) return; // timer e votazione: il ruolo lo controlla il server
       if (peer.role === "viewer") return; // sola lettura: i viewer non scrivono, qualunque cosa mandino
       if (msg?.t === "els") {
         const { accepted, denied } = r.applyElements(msg.els, peer);
