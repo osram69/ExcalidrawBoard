@@ -3,7 +3,7 @@
 import { MAX_AULA, roomId, validateAssign } from "./assign.ts";
 import { gotoToken, type Course } from "./course.ts";
 import { assignedRoom, openRound, writeCourse, writeParent, type RoomInfo } from "./course-data.ts";
-import { getRoom, roomDir, type Peer, type Room } from "./rooms.ts";
+import { getRoom, loadedRoom, roomDir, type Peer, type Room } from "./rooms.ts";
 
 const COPY_CHUNK = 1000; // elementi per volta nella copia (il server ne accetta al massimo 5000 per messaggio)
 const FILES_CHUNK = 20;
@@ -25,6 +25,9 @@ export function handleRoomsMessage(r: Room, peer: Peer, msg: Record<string, unkn
   if (peer.role !== "editor" || !course) return true; // solo i trainer; per gli altri è come se non esistesse
   try {
     if (msg.t === "rooms-create") createRooms(r, course, peer, msg);
+    else if (msg.t === "rooms-move") moveMember(course, peer, msg);
+    else if (msg.t === "rooms-visit") visit(course, peer, msg);
+    else if (msg.t === "rooms-close") closeRooms(course, peer);
   } catch (e) {
     console.error("Azione sulle stanze non riuscita:", e);
     error(peer, "Qualcosa è andato storto sul server: riprova.");
@@ -64,6 +67,46 @@ function createRooms(r: Room, course: Course, peer: Peer, msg: Record<string, un
   for (const p of aulaPeers) {
     const n = v.assign.get(p.key);
     if (n) goto(course, p, roomId(course.aula, round, n));
+  }
+  course.pushPresence();
+}
+
+const connectedAnywhere = (course: Course, key: string): Peer[] => course.loaded().flatMap((rm) => [...rm.peers]).filter((p) => p.key === key && p.role !== "editor");
+
+/** Sposta un partecipante collegato in un'altra stanza del turno aperto (anche chi era rimasto in aula). */
+function moveMember(course: Course, peer: Peer, msg: Record<string, unknown>): void {
+  const round = openRound(course.data);
+  if (!round) return error(peer, "Non c'è nessun turno di stanze aperto.");
+  const target = typeof msg.n === "number" && Number.isInteger(msg.n) ? round.rooms.find((x) => x.n === msg.n) : undefined;
+  if (!target) return error(peer, "Stanza non valida.");
+  const people = typeof msg.key === "string" ? connectedAnywhere(course, msg.key) : [];
+  if (!people.length) return error(peer, "Il partecipante non è collegato.");
+  const key = people[0].key;
+  for (const room of round.rooms) room.members = room.members.filter((m) => m.key !== key);
+  target.members.push({ key, name: people[0].name });
+  writeCourse(course.dir, course.data);
+  for (const p of people) goto(course, p, target.id);
+  course.pushPresence();
+}
+
+/** Il trainer apre l'aula o una stanza del corso (anche di un turno chiuso): riceve un token da trainer per quella board. */
+function visit(course: Course, peer: Peer, msg: Record<string, unknown>): void {
+  const room = msg.room;
+  if (typeof room !== "string" || !course.boardIds().includes(room)) return error(peer, "Stanza non valida.");
+  goto(course, peer, room);
+}
+
+/** Chiude il turno aperto: tutti quelli che sono nelle sue stanze tornano in aula; le board restano salvate. */
+function closeRooms(course: Course, peer: Peer): void {
+  const round = openRound(course.data);
+  if (!round) return error(peer, "Non c'è nessun turno di stanze aperto.");
+  round.open = false;
+  writeCourse(course.dir, course.data);
+  for (const info of round.rooms) {
+    const rm = loadedRoom(info.id);
+    if (!rm) continue;
+    rm.flush();
+    for (const p of [...rm.peers]) goto(course, p, course.aula);
   }
   course.pushPresence();
 }
