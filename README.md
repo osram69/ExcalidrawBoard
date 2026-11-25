@@ -70,6 +70,31 @@ npm run seed -- isaqb-dic26 3 board:lezione1 --server https://board.esempio.it
 - **Sicurezza di ripartenza:** una board di destinazione che ha già del contenuto viene **saltata** con un avviso, mai svuotata; per ricominciare usa un altro nome di corso.
   Collegarsi a una board che non esiste ne crea la cartella vuota (succede anche con un nome di `board:` sbagliato).
 
+## Accesso degli allievi (login con la password della sessione)
+
+Il trainer dà **un solo link per board**, uguale per tutti (`https://…/b/<board>`). Chi lo apre senza accesso trova la **pagina di login**: nome, cognome, email e la **password della sessione**
+(la stessa che Cube Academy comunica a tutti gli iscritti di quell'edizione, per esempio quella di dicembre). Poi entra con il proprio nome e il trainer ne vede il cursore, come in Miro.
+
+```powershell
+npm run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" --fino-al 2026-12-20
+```
+
+- **Password e fine sessione:** `--password` (da 8 a 200 caratteri) vale per tutte le board del corso e si conserva sul server **solo come impronta** (scrypt), mai in chiaro;
+  `--fino-al AAAA-MM-GG` è l'ultimo giorno (fino a fine giornata): dopo, nessuno entra e chi è collegato viene scollegato e riportato al login. Rilanciando il comando con un'altra password su board già piene,
+  la password si aggiorna. La password non viene mai stampata dal comando.
+- **Edizioni passate:** ogni sessione ha le sue board, la sua password e la sua data di fine, quindi chi ha seguito l'edizione precedente non entra in quella nuova.
+- **Identità personale:** l'identificativo di ciascuno deriva dall'email (con un'impronta: la mail non è visibile agli altri), quindi cursori, oggetti e puntini di voto sono per persona. L'email **non è verificata**: identifica,
+  l'autenticazione è la password della sessione.
+- **"Ricordami su questo dispositivo":** se spuntato, nome, cognome ed email restano nel browser (il login successivo, anche su un'altra board, li ripropone) e l'accesso dura più a lungo
+  (fino alla fine della sessione, al massimo `LOGIN_REMEMBER_DAYS` giorni, predefinito 7), così riaprendo la board non si rifà il login. **La password non viene mai salvata nel browser.**
+  Se non è spuntato non si ricorda nulla. Il pulsante **Esci** nella barra in alto cancella accesso e dati ricordati (utile sui computer condivisi).
+- **Durata dell'accesso:** `LOGIN_TOKEN_HOURS` (predefinito 12) senza "ricordami"; mai oltre la data di fine.
+- **Tentativi:** dopo 10 password sbagliate in 10 minuti, dalla stessa connessione per la stessa board, il login risponde "troppi tentativi" per 10 minuti (dietro il tunnel Cloudflare si usa l'indirizzo `CF-Connecting-IP`).
+- **Il trainer** continua a entrare con il suo link firmato (`editor`), stampato dal comando; il login con password dà sempre il ruolo `participant`.
+- **Link personali** (`--allievi file`) restano disponibili come alternativa al login, per chi vuole dare a ognuno un link.
+- **Orologio:** scadenze e data di fine usano l'orologio del Raspberry: tienilo sincronizzato (NTP, attivo di default su Raspberry Pi OS).
+- **Se l'accesso è scaduto** la board lo riconosce subito e riporta al login con un messaggio chiaro, invece di restare "offline".
+
 ## Sul Raspberry (Docker)
 
 Come la variante tldraw: `.env` con `BOARD_SECRET`, `mkdir -p data && sudo chown 1000:1000 data`, `docker compose up -d --build`.

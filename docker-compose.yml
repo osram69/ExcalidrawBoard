@@ -8,6 +8,8 @@ services:
     restart: unless-stopped
     environment:
       BOARD_SECRET: ${BOARD_SECRET:?imposta BOARD_SECRET nel file .env}
+      LOGIN_TOKEN_HOURS: ${LOGIN_TOKEN_HOURS:-12}
+      LOGIN_REMEMBER_DAYS: ${LOGIN_REMEMBER_DAYS:-7}
     volumes:
       - ./data:/data # board e immagini: sopravvivono a ricostruzioni e aggiornamenti
     ports:
