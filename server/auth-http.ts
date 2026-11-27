@@ -1,13 +1,13 @@
 // Rotte di accesso (/auth/…): login degli allievi con la password di sessione, impostazione della password da parte del trainer,
 // verifica di un token. Tutte rispondono JSON; il token viaggia solo nell'intestazione Authorization, mai nell'indirizzo.
-//   POST /auth/login                      { room, nome, cognome, email, password, ricordami? } -> { ok, token, name, exp }
+//   POST /auth/login                      { room, nome, cognome, password, ricordami? } -> { ok, token, name, exp }
 //   PUT  /auth/access?room=<board>        (editor della board) { password?, until? }            -> { ok, until }
 //   GET  /auth/access?room=<board>        (editor della board)                                  -> { ok, configured, password|null, until|null }
 //   GET  /auth/check?room=<board>         Authorization: Bearer <token>                         -> { ok, name, role, exp }
 import type http from "node:http";
 import { readParent } from "./course-data.ts";
 import path from "node:path";
-import { inspectToken, personalUid, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
+import { inspectToken, personalUid, personKey, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
 import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess, type RoomAccess } from "./access.ts";
 
 export interface AuthOptions {
@@ -68,7 +68,7 @@ function readJson(req: http.IncomingMessage): Promise<unknown> {
 
 /** Gestisce le rotte /auth/…; restituisce `true` se la richiesta era di questo gruppo. */
 export function createAuthHandler(opts: AuthOptions) {
-  const personLimit = new AttemptLimiter(10); // per indirizzo + board + email
+  const personLimit = new AttemptLimiter(10); // per indirizzo + board + nome e cognome
   const netLimit = new AttemptLimiter(100); // per indirizzo + board
   const roomLimit = new AttemptLimiter(500); // per board: oltre, si rallenta (non si blocca)
   const gate = new ConcurrencyGate(4); // verifiche della password in corso insieme
@@ -92,9 +92,10 @@ export function createAuthHandler(opts: AuthOptions) {
     const WRONG = "Password non corretta, oppure questa board non ha un accesso con password.";
     const access = readAccess(roomDir(b.room));
     if (!access) return fail(res, 401, WRONG); // niente da verificare e nessun contatore da riempire: i nomi delle board sono pubblici nei link
-    // Limiti: per persona (indirizzo, board, email: 10) e per rete (indirizzo, board: 100, così una classe dietro lo stesso indirizzo non si blocca a vicenda).
+    // Limiti: per persona (indirizzo, board, nome e cognome: 10) e per rete (indirizzo, board: 100, così una classe dietro lo stesso indirizzo non si blocca a vicenda).
     const net = `${normalizeIp(clientIp(req))}|${b.room}`;
-    const person = `${net}|${b.email}`;
+    const who = personKey(b.name); // nome e cognome: identificano la persona (limiti e proprietà degli oggetti)
+    const person = `${net}|${who}`;
     if (personLimit.blocked(person) || netLimit.blocked(net)) return fail(res, 429, "Troppi tentativi: riprova tra qualche minuto.");
     if (!gate.tryEnter()) return fail(res, 503, "Il server è occupato: riprova tra qualche secondo.");
     // Il tentativo si conta PRIMA di verificare (richieste in parallelo non lo aggirano) e si restituisce se la password è giusta.
@@ -115,7 +116,7 @@ export function createAuthHandler(opts: AuthOptions) {
     const now = Date.now();
     if (access.until !== null && access.until <= now) return fail(res, 403, "La sessione è terminata.");
     const exp = sessionExp(now, access.until, b.ricordami, opts.hours, opts.days);
-    const token = signToken({ room: b.room, name: b.name, uid: personalUid(b.email, opts.secret), email: b.email, role: "participant", exp }, opts.secret);
+    const token = signToken({ room: b.room, name: b.name, uid: personalUid(who, opts.secret), role: "participant", exp }, opts.secret);
     json(res, 200, { ok: true, token, name: b.name, exp });
   }
 

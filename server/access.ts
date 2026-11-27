@@ -1,12 +1,12 @@
 // Accesso degli allievi con la password della sessione: impronta della password, dati per board, limite di tentativi.
 // Per il login conta solo l'impronta. La password della sessione si conserva anche leggibile (campo `password`, file 0600) perché il
 // trainer deve poterla rivedere e comunicare agli allievi; la rilegge solo l'editor della board (GET /auth/access).
-// La mail dichiarata identifica la persona ma non la autentica.
+// Nome e cognome dichiarati identificano la persona ma non la autenticano.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
-import { normalizeEmail, ROOM_ID } from "./auth.ts";
+import { ROOM_ID } from "./auth.ts";
 
 export interface RoomAccess {
   passwordHash: string; // "scrypt$<sale>$<impronta>"
@@ -146,7 +146,7 @@ export function sessionExp(now: number, until: number | null, ricordami: boolean
   return until === null ? base : Math.min(base, until);
 }
 
-export type LoginBody = { ok: true; room: string; name: string; email: string; password: string; ricordami: boolean } | { ok: false; status: 400; motivo: string };
+export type LoginBody = { ok: true; room: string; name: string; password: string; ricordami: boolean } | { ok: false; status: 400; motivo: string };
 
 const bad = (motivo: string): LoginBody => ({ ok: false, status: 400, motivo });
 
@@ -160,8 +160,7 @@ export function parseLoginBody(raw: unknown): LoginBody {
   const cognome = part(b.cognome);
   if (!nome || nome.length > 40) return bad("Inserisci il nome (massimo 40 caratteri).");
   if (!cognome || cognome.length > 40) return bad("Inserisci il cognome (massimo 40 caratteri).");
-  const email = normalizeEmail(b.email);
-  if (!email) return bad("Inserisci un indirizzo email valido.");
+  // l'email non si chiede più: un eventuale campo `email` inviato da un client vecchio viene ignorato
   if (typeof b.password !== "string" || !b.password || b.password.length > 200) return bad("Inserisci la password della sessione.");
-  return { ok: true, room: b.room, name: `${nome} ${cognome}`, email, password: b.password, ricordami: b.ricordami === true };
+  return { ok: true, room: b.room, name: `${nome} ${cognome}`, password: b.password, ricordami: b.ricordami === true };
 }

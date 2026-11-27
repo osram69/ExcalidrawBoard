@@ -14,7 +14,6 @@ export interface Stores {
 export interface Profile {
   nome: string;
   cognome: string;
-  email: string;
   ricordami: boolean;
 }
 
@@ -51,7 +50,7 @@ export function saveLogin(s: Stores, room: string, token: string, p: Profile): v
   if (!keep) removeAllTokens(s.local);
   quiet(() => (keep ? s.local : s.session).setItem(TOKEN(room), token), undefined);
   quiet(() => (keep ? s.session : s.local).removeItem(TOKEN(room)), undefined);
-  if (keep) quiet(() => s.local.setItem(PROFILE, JSON.stringify({ nome: p.nome, cognome: p.cognome, email: p.email, ricordami: true })), undefined);
+  if (keep) quiet(() => s.local.setItem(PROFILE, JSON.stringify({ nome: p.nome, cognome: p.cognome, ricordami: true })), undefined);
   else quiet(() => s.local.removeItem(PROFILE), undefined);
 }
 
@@ -62,7 +61,7 @@ export function readToken(s: Stores, room: string): string | null {
 
 /**
  * Toglie l'accesso a una board. Con `forgetProfile` ("Esci") toglie invece gli accessi di TUTTE le board (dalla scheda e dal dispositivo)
- * e anche nome, cognome ed email ricordati: su un computer condiviso la persona dopo non deve trovarsi dentro con l'accesso della precedente.
+ * e anche nome e cognome ricordati: su un computer condiviso la persona dopo non deve trovarsi dentro con l'accesso della precedente.
  */
 export function clearAccess(s: Stores, room: string, forgetProfile: boolean): void {
   quiet(() => s.session.removeItem(TOKEN(room)), undefined);
@@ -75,14 +74,14 @@ export function clearAccess(s: Stores, room: string, forgetProfile: boolean): vo
 }
 
 export function loadProfile(s: Stores): Profile {
-  const empty: Profile = { nome: "", cognome: "", email: "", ricordami: false };
+  const empty: Profile = { nome: "", cognome: "", ricordami: false };
   const raw = quiet(() => s.local.getItem(PROFILE), null);
   if (!raw) return empty;
   try {
     const j = JSON.parse(raw);
     const str = (v: unknown) => (typeof v === "string" ? v : "");
-    if (typeof j?.nome !== "string" && typeof j?.email !== "string") return empty;
-    return { nome: str(j.nome), cognome: str(j.cognome), email: str(j.email), ricordami: j.ricordami === true };
+    if (typeof j?.nome !== "string") return empty;
+    return { nome: str(j.nome), cognome: str(j.cognome), ricordami: j.ricordami === true };
   } catch {
     return empty;
   }

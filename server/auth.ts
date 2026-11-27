@@ -77,7 +77,15 @@ export function normalizeEmail(raw: unknown): string | null {
 }
 
 /**
- * Identificativo stabile di una persona a partire dalla mail, senza mostrare la mail agli altri (finisce in cursori e proprietà degli oggetti).
+ * Chiave di una persona che entra con nome e cognome (senza email): minuscole, spazi ridotti, forme unicode unificate.
+ * "Anna  Rossi" e "anna rossi" sono la stessa persona; il prefisso `n:` la distingue da una chiave ricavata da una mail.
+ */
+export function personKey(name: string): string {
+  return `n:${name.normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim()}`;
+}
+
+/**
+ * Identificativo stabile di una persona a partire dalla mail (o da `personKey`), senza mostrare la mail agli altri (finisce in cursori e proprietà degli oggetti).
  * È un HMAC con il segreto del server: senza di esso nessuno può calcolare l'identificativo di una mail nota e scoprire chi c'è nella board.
  */
 export function personalUid(email: string, secret: string): string {

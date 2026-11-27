@@ -70,15 +70,18 @@ test("sessionExp: durata normale, ricordami, tetto della data di fine", () => {
 });
 
 test("parseLoginBody: dati validi puliti, errori con messaggio", () => {
-  const ok: any = parseLoginBody({ room: "corso-g1", nome: "  Anna ", cognome: " Rossi", email: " Anna.Rossi@Esempio.it ", password: "dicembre-2026", ricordami: true });
+  const ok: any = parseLoginBody({ room: "corso-g1", nome: "  Anna ", cognome: " Rossi", password: "dicembre-2026", ricordami: true });
   assert.equal(ok.ok, true);
-  assert.deepEqual({ ...ok }, { ok: true, room: "corso-g1", name: "Anna Rossi", email: "anna.rossi@esempio.it", password: "dicembre-2026", ricordami: true });
-  assert.equal((parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", email: "a@esempio.it", password: "x" }) as any).ricordami, false);
-  assert.equal((parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", email: "a@esempio.it", password: "x", ricordami: "si" }) as any).ricordami, false);
-  const base = { room: "corso-g1", nome: "Anna", cognome: "Rossi", email: "a@esempio.it", password: "dicembre-2026" };
+  assert.deepEqual({ ...ok }, { ok: true, room: "corso-g1", name: "Anna Rossi", password: "dicembre-2026", ricordami: true });
+  assert.equal((parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", password: "x" }) as any).ricordami, false);
+  assert.equal((parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", password: "x", ricordami: "si" }) as any).ricordami, false);
+  // l'email non serve più: se un client vecchio la manda (anche sbagliata) viene ignorata
+  assert.equal((parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", email: "non-una-mail", password: "x" }) as any).ok, true);
+  assert.equal("email" in (parseLoginBody({ room: "corso-g1", nome: "A", cognome: "B", email: "a@esempio.it", password: "x" }) as object), false);
+  const base = { room: "corso-g1", nome: "Anna", cognome: "Rossi", password: "dicembre-2026" };
   for (const bad of [
     null, "testo", [], {}, { ...base, room: "board con spazi" }, { ...base, room: 5 }, { ...base, nome: "" }, { ...base, nome: "   " }, { ...base, cognome: "" },
-    { ...base, nome: "a".repeat(41) }, { ...base, cognome: "a".repeat(41) }, { ...base, email: "anna" }, { ...base, email: 3 }, { ...base, password: "" }, { ...base, password: "a".repeat(201) }, { ...base, password: 12 },
+    { ...base, nome: "a".repeat(41) }, { ...base, cognome: "a".repeat(41) }, { ...base, password: "" }, { ...base, password: "a".repeat(201) }, { ...base, password: 12 },
   ]) {
     const r: any = parseLoginBody(bad);
     assert.equal(r.ok, false, JSON.stringify(bad));

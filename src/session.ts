@@ -77,7 +77,10 @@ export function acceptLogin(room: string, token: string, profile: Profile): Boar
   return toSession(room, token);
 }
 
-/** Toglie l'accesso a questa board; con `forget` ("Esci") anche nome, cognome ed email ricordati. */
+/** Entrato con il login (password di sessione) e non con un link del trainer: l'identificativo personale è `u-` + 20 cifre esadecimali. */
+export const isLoginSession = (s: BoardSession): boolean => /^u-[0-9a-f]{20}$/.test(s.uid ?? "");
+
+/** Toglie l'accesso a questa board; con `forget` ("Esci") anche nome e cognome ricordati. */
 export function dropSession(room: string, forget: boolean): void {
   clearAccess(stores(), room, forget);
 }

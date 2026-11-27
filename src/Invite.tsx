@@ -25,7 +25,7 @@ const fromInputDate = (v: string) => {
 /** Testo da incollare in una mail o in chat: link, password e (se c'è) l'ultimo giorno, da poter rimandare quante volte serve. */
 function inviteText(link: string, password: string, until: string): string {
   const fine = until ? `\nDisponibile fino al ${until.split("-").reverse().join("/")}.` : "";
-  return `Accesso alla board del corso\nLink: ${link}\nPassword: ${password}\nAll'apertura inserisci nome, cognome, email e la password.${fine}`;
+  return `Accesso alla board del corso\nLink: ${link}\nPassword: ${password}\nAll'apertura inserisci nome, cognome e la password.${fine}`;
 }
 
 /** Pannello "Invita": il link da dare agli allievi e la password della sessione (con la data di fine, facoltativa). */
@@ -109,7 +109,7 @@ export function Invite({ room, token, onClose }: Props) {
       <PanelHead title="Invita gli allievi" onClose={onClose} />
       <section>
         <h3>Link per gli allievi</h3>
-        <p className="side-note">Lo stesso per tutti: chi lo apre trova la pagina di accesso con nome, cognome, email e la password della sessione.</p>
+        <p className="side-note">Lo stesso per tutti: chi lo apre trova la pagina di accesso con nome, cognome e la password della sessione.</p>
         <div className="side-row">
           <input readOnly value={link} onFocus={(e) => e.currentTarget.select()} aria-label="Link per gli allievi" />
           <button className="side-btn" onClick={() => copy(link, "Link copiato.")}>

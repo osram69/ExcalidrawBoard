@@ -5,7 +5,7 @@ import { Home } from "./Home";
 import { Login } from "./Login";
 import { reasonText } from "./remember";
 import { aulaOf, closedAula, gotoUrl } from "./goto";
-import { acceptLogin, dropSession, loadSession, moveTo, roomFromPath, type BoardSession } from "./session";
+import { acceptLogin, dropSession, isLoginSession, loadSession, moveTo, roomFromPath, type BoardSession } from "./session";
 import "./styles.css";
 
 type State = { kind: "checking" } | { kind: "login"; reason?: string } | { kind: "board"; session: BoardSession };
@@ -122,7 +122,7 @@ function BoardPage({ room }: { room: string }) {
       onGoto={onGoto}
       onBackToAula={onBackToAula}
       onLogout={
-        state.session.email
+        isLoginSession(state.session)
           ? () => {
               dropSession(room, true);
               setState({ kind: "login" });

@@ -75,25 +75,25 @@ npm.cmd run seed -- isaqb-dic26 3 board:lezione1 --server https://board.esempio.
 
 ## Accesso degli allievi (login con la password della sessione)
 
-Il trainer dà **un solo link per board**, uguale per tutti (`https://…/b/<board>`). Chi lo apre senza accesso trova la **pagina di login**: nome, cognome, email e la **password della sessione**
+Il trainer dà **un solo link per board**, uguale per tutti (`https://…/b/<board>`). Chi lo apre senza accesso trova la **pagina di login**: nome, cognome e la **password della sessione**
 (la stessa che Cube Academy comunica a tutti gli iscritti di quell'edizione, per esempio quella di dicembre). Poi entra con il proprio nome e il trainer ne vede il cursore, come in Miro.
 
 ```powershell
 npm.cmd run seed -- isaqb-dic26 4 uml.png --password "la-password-di-dicembre" --fino-al 2026-12-20
 ```
 
-- **Password e fine sessione:** `--password` (da 8 a 200 caratteri) vale per tutte le board del corso e si conserva sul server **solo come impronta** (scrypt), mai in chiaro;
+- **Password e fine sessione:** `--password` (da 8 a 200 caratteri) vale per tutte le board del corso e si conserva sul server come impronta (scrypt) per il login **e anche in chiaro** in `access.json` (file 0600), perché il trainer possa rivederla e rimandarla dal pannello **Invita** (la rilegge solo l'editor della board);
   `--fino-al AAAA-MM-GG` è l'ultimo giorno (fino a fine giornata): dopo, nessuno entra e chi è collegato viene scollegato e riportato al login. Rilanciando il comando con un'altra password su board già piene,
   la password si aggiorna e **la data di fine resta quella di prima** (se non indichi `--fino-al`); `--fino-al nessuna` la toglie. Il comando stampa la data in vigore per ogni board.
-  La password non viene mai stampata dal comando.
+  La password non viene mai stampata dal comando. Dal pannello **Invita** il trainer la imposta con **Salva**, ne crea una casuale di 8 caratteri con **Genera** e copia il messaggio per gli allievi; le board con password impostata prima di questa funzione non possono mostrarla (basta generarne una nuova).
 - **Edizioni passate:** ogni sessione ha le sue board, la sua password e la sua data di fine, quindi chi ha seguito l'edizione precedente non entra in quella nuova.
-- **Identità personale:** l'identificativo di ciascuno deriva dall'email (con un'impronta firmata con il segreto del server: la mail non è visibile agli altri e nessuno può ricavare l'identificativo di una mail che conosce), quindi cursori, oggetti e puntini di voto sono per persona. L'email **non è verificata**: identifica,
-  l'autenticazione è la password della sessione.
-- **"Ricordami su questo dispositivo":** se spuntato, nome, cognome ed email restano nel browser (il login successivo, anche su un'altra board, li ripropone) e l'accesso dura più a lungo
+- **Identità personale:** l'identificativo di ciascuno deriva da nome e cognome (maiuscole e spazi non contano: "anna  ROSSI" è "Anna Rossi"), con un'impronta firmata con il segreto del server, quindi cursori, oggetti e puntini di voto sono per persona.
+  Non si chiede l'email. Nome e cognome **non sono verificati**: identificano, l'autenticazione è la password della sessione. Due persone con lo stesso nome e cognome nella stessa edizione risultano la stessa persona: in quel caso conviene aggiungere un'iniziale al cognome.
+- **"Ricordami su questo dispositivo":** se spuntato, nome e cognome restano nel browser (il login successivo, anche su un'altra board, li ripropone) e l'accesso dura più a lungo
   (fino alla fine della sessione, al massimo `LOGIN_REMEMBER_DAYS` giorni, predefinito 7), così riaprendo la board non si rifà il login. **La password non viene mai salvata nel browser.**
   Se non è spuntato non si ricorda nulla. Il pulsante **Esci** nella barra in alto cancella gli accessi di **tutte** le board e i dati ricordati su quel dispositivo (utile sui computer condivisi); anche un login senza "ricordami" cancella gli accessi ricordati prima.
 - **Durata dell'accesso:** `LOGIN_TOKEN_HOURS` (predefinito 12) senza "ricordami"; mai oltre la data di fine.
-- **Tentativi:** dopo 10 password sbagliate in 10 minuti per la stessa persona (indirizzo, board ed email), il login risponde "troppi tentativi" per 10 minuti; c'è anche un tetto per rete (100 errori su una board), così una classe dietro lo stesso indirizzo di ufficio non si blocca per un errore di battitura dei compagni.
+- **Tentativi:** dopo 10 password sbagliate in 10 minuti per la stessa persona (indirizzo, board, nome e cognome), il login risponde "troppi tentativi" per 10 minuti; c'è anche un tetto per rete (100 errori su una board), così una classe dietro lo stesso indirizzo di ufficio non si blocca per un errore di battitura dei compagni.
   Se su una board arrivano più di 500 errori in 10 minuti, ogni tentativo viene rallentato di un secondo. La verifica della password non blocca il server (gira nel pool di thread, al massimo 4 insieme; oltre, il login risponde "server occupato, riprova").
   Gli indirizzi IPv6 si contano per rete /64. Dietro il tunnel Cloudflare si usa l'indirizzo `CF-Connecting-IP`: **non esporre la porta del server direttamente su internet**, altrimenti l'intestazione si può falsificare (con il `docker-compose.yml` fornito la porta è solo locale e passa dal tunnel).
   Se il blocco scatta per errore, basta aspettare 10 minuti o riavviare il server.
@@ -118,7 +118,7 @@ Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanz
 
 1. **Prepara l'aula.** Apri la board con il tuo link da trainer (`npm run token -- <aula> "Trainer" editor 12 <indirizzo> trainer`), disegna il materiale e premi **Invita** in alto: trovi il link da dare agli allievi
    (lo stesso per tutti), e imposti la **password della sessione** e, se vuoi, l'ultimo giorno. Il nome dell'aula può avere al massimo 50 caratteri se userai le stanze.
-2. **Gli allievi entrano** dal link con nome, cognome, email e password (vedi "Accesso degli allievi"). Con il pulsante **Stanze** vedi chi è collegato e dove si trova (aula o stanza); i cursori hanno il nome accanto.
+2. **Gli allievi entrano** dal link con nome, cognome e password (vedi "Accesso degli allievi"). Con il pulsante **Stanze** vedi chi è collegato e dove si trova (aula o stanza); i cursori hanno il nome accanto.
 3. **Crea le stanze:** in **Stanze → Crea stanze** scegli quante (da 2 a 12) e assegni ogni allievo a mano, oppure premi **Distribuisci a caso**; poi **Crea e sposta**. Ogni stanza è una board nuova con **una copia di quello che hai
    disegnato in aula in quel momento** (gli oggetti restano tuoi: gli allievi non li spostano, aggiungono i propri) e gli assegnati vengono portati dentro automaticamente. Accanto al nome compare "Stanza n". Chi non assegni resta in aula.
 4. **Il timer è unico per tutto il corso:** lo avvii dall'aula o da una stanza e parte per tutti (aula e stanze), con le stesse pause.
@@ -134,7 +134,7 @@ Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanz
 - **Sicurezza e recupero:** il server non si fida che il browser obbedisca allo spostamento: chi resta collegato a una stanza dopo averla lasciata (spostato o turno chiuso) viene scollegato e le sue modifiche non vengono salvate.
   Le nuove stanze non toccano mai una board che esiste già con quel nome (per esempio dopo aver perso `course.json`): si usa il primo turno libero. Se `course.json` dell'aula è danneggiato non si creano stanze (per non perdere quelle esistenti) e se ne conserva una copia in `course.json.bad`.
   Chi arriva a una stanza senza un accesso valido viene riportato al login dell'aula e da lì rientra nella sua stanza.
-- **Identità:** l'email dichiarata al login decide anche in quale stanza si entra. Chi conosce l'email di un compagno e la password della sessione può entrare come lui: la mail identifica ma non autentica (vedi "Accesso degli allievi").
+- **Identità:** il nome e cognome dichiarati al login decidono anche in quale stanza si entra. Chi conosce nome e cognome di un compagno e la password della sessione può entrare come lui: nome e cognome identificano ma non autenticano (vedi "Accesso degli allievi").
 
 ## Sul Raspberry (Docker)
 

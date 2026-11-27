@@ -6,15 +6,14 @@ interface Props {
   room: string;
   reason?: string; // perché si è tornati al login (accesso scaduto, ecc.)
   trainerLoginUrl?: string | null; // login del trainer sul sito Cube Academy, se configurato
-  onLogin: (token: string, profile: { nome: string; cognome: string; email: string; ricordami: boolean }) => void;
+  onLogin: (token: string, profile: { nome: string; cognome: string; ricordami: boolean }) => void;
 }
 
-/** Pagina di accesso degli allievi: nome, cognome, email e la password della sessione (uguale per tutti). */
+/** Pagina di accesso degli allievi: nome, cognome e la password della sessione (uguale per tutti). */
 export function Login({ room, reason, trainerLoginUrl, onLogin }: Props) {
   const saved = savedProfile();
   const [nome, setNome] = useState(saved.nome);
   const [cognome, setCognome] = useState(saved.cognome);
-  const [email, setEmail] = useState(saved.email);
   const [password, setPassword] = useState("");
   const [ricordami, setRicordami] = useState(saved.ricordami);
   const [error, setError] = useState<string | null>(null);
@@ -29,11 +28,11 @@ export function Login({ room, reason, trainerLoginUrl, onLogin }: Props) {
       const r = await fetch("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ room, nome, cognome, email, password, ricordami }),
+        body: JSON.stringify({ room, nome, cognome, password, ricordami }),
       });
       const j = await r.json().catch(() => null);
       if (r.ok && j?.token) {
-        onLogin(j.token, { nome: nome.trim(), cognome: cognome.trim(), email: email.trim(), ricordami });
+        onLogin(j.token, { nome: nome.trim(), cognome: cognome.trim(), ricordami });
         return;
       }
       setError(j?.motivo || "Accesso non riuscito: riprova.");
@@ -64,10 +63,6 @@ export function Login({ room, reason, trainerLoginUrl, onLogin }: Props) {
             <input value={cognome} onChange={(e) => setCognome(e.target.value)} required maxLength={40} autoComplete="family-name" />
           </label>
         </div>
-        <label>
-          Email
-          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required maxLength={120} autoComplete="email" />
-        </label>
         <label>
           Password della sessione
           <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required maxLength={200} autoComplete="off" autoFocus={!!nome} />

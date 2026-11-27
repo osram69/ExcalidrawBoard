@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { WebSocket } from "ws";
-import { inspectToken, personalUid, signToken, type TokenPayload } from "./auth.ts";
+import { inspectToken, personalUid, personKey, signToken, type TokenPayload } from "./auth.ts";
 import { startServer, type TestServer } from "./test-server.ts";
 
 const SECRET = "chiave-di-prova";
@@ -26,7 +26,7 @@ const setAccess = (room: string, body: unknown, token: string | undefined = tok(
     body: JSON.stringify(body),
   });
 const login = (room: string, o: Record<string, unknown> = {}) =>
-  post("/auth/login", { room, nome: "Anna", cognome: "Rossi", email: "Anna.Rossi@Esempio.it", password: "dicembre-2026", ...o });
+  post("/auth/login", { room, nome: "Anna", cognome: "Rossi", password: "dicembre-2026", ...o });
 const check = (room: string, token?: string) => fetch(`${srv.url}/auth/check?room=${encodeURIComponent(room)}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
 
 test("/auth/access: solo il trainer (editor) della stessa board imposta la password", async () => {
@@ -73,7 +73,7 @@ test("GET /auth/access: solo il trainer rilegge password e fine sessione", async
   assert.equal((await get(tok(room))).headers.get("cache-control"), "no-store");
 });
 
-test("/auth/login: token personale con nome, mail e uid derivato", async () => {
+test("/auth/login: token personale con nome e uid derivato da nome e cognome (senza email)", async () => {
   const room = "log1";
   await setAccess(room, { password: "dicembre-2026" });
   const r = await login(room);
@@ -85,10 +85,25 @@ test("/auth/login: token personale con nome, mail e uid derivato", async () => {
   assert.equal(c.ok, true);
   if (!c.ok) return;
   assert.equal(c.payload.role, "participant");
-  assert.equal(c.payload.email, "anna.rossi@esempio.it");
-  assert.equal(c.payload.uid, personalUid("anna.rossi@esempio.it", SECRET));
+  assert.equal(c.payload.email, undefined, "nessuna email nel token");
+  assert.equal(c.payload.uid, personalUid(personKey("Anna Rossi"), SECRET));
+  assert.match(c.payload.uid ?? "", /^u-[0-9a-f]{20}$/);
   assert.ok(Math.abs(c.payload.exp - (Date.now() + 12 * 3600e3)) < 10_000);
   assert.equal(j.exp, c.payload.exp);
+});
+
+test("/auth/login: stessa persona = stesso uid, anche con maiuscole e spazi diversi; persone diverse = uid diversi; l'email inviata è ignorata", async () => {
+  const room = "log1b";
+  await setAccess(room, { password: "dicembre-2026" });
+  const uidOf = async (o: Record<string, unknown>) => {
+    const c = inspectToken(((await (await login(room, o)).json()) as any).token, room, SECRET);
+    assert.ok(c.ok);
+    return c.ok ? c.payload.uid : undefined;
+  };
+  const anna = await uidOf({});
+  assert.equal(await uidOf({ nome: " anna ", cognome: "ROSSI" }), anna);
+  assert.equal(await uidOf({ email: "qualsiasi@esempio.it" }), anna);
+  assert.notEqual(await uidOf({ nome: "Luca" }), anna);
 });
 
 test("/auth/login: ricordami allunga l'accesso, la data di fine lo limita", async () => {
@@ -126,7 +141,7 @@ test("/auth/login: dopo la fine della sessione entra nessuno (e la password sbag
 test("/auth/login: dati non validi, corpo non JSON o troppo grande, metodo sbagliato", async () => {
   const room = "log5";
   await setAccess(room, { password: "dicembre-2026" });
-  for (const o of [{ nome: "" }, { cognome: "" }, { email: "no" }, { password: "" }, { room: "con spazi" }]) {
+  for (const o of [{ nome: "" }, { cognome: "" }, { password: "" }, { room: "con spazi" }]) {
     assert.equal((await login(room, o)).status, 400, JSON.stringify(o));
   }
   assert.equal((await post("/auth/login", "non json")).status, 400);
@@ -160,7 +175,7 @@ test("il token ottenuto con il login è accettato dal WebSocket e porta nome e u
   });
   assert.equal(init.me.name, "Anna Rossi");
   assert.equal(init.me.role, "participant");
-  assert.equal(init.me.key, personalUid("anna.rossi@esempio.it", SECRET));
+  assert.equal(init.me.key, personalUid(personKey("Anna Rossi"), SECRET));
   ws.close();
 });
 
@@ -211,31 +226,33 @@ test("un token valido a lungo non viene chiuso", async () => {
   ws.close();
 });
 
-const loginAs = (room: string, email: string, password: string) => login(room, { email, password });
+// ogni "persona" è un nome diverso (il cognome è fisso): nome e cognome sono ciò che identifica chi entra
+const loginAs = (room: string, nome: string, password: string) => login(room, { nome, cognome: "Prova", password });
 
 test("una classe dietro la stessa rete: 10 allievi sbagliano una volta, l'undicesimo con la password giusta entra", async () => {
   const room = "nat1";
   await setAccess(room, { password: "dicembre-2026" });
-  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, `allievo${i}@esempio.it`, "sbagliata-123")).status, 401);
-  assert.equal((await loginAs(room, "undicesimo@esempio.it", "dicembre-2026")).status, 200);
+  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, `Allievo${i}`, "sbagliata-123")).status, 401);
+  assert.equal((await loginAs(room, "Undicesimo", "dicembre-2026")).status, 200);
 });
 
-test("lo stesso indirizzo email dopo 10 errori è bloccato, un'altra mail no", async () => {
+test("lo stesso nome e cognome dopo 10 errori è bloccato (anche scritto in modo diverso), un'altra persona no", async () => {
   const room = "nat2";
   await setAccess(room, { password: "dicembre-2026" });
-  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, "bersaglio@esempio.it", `sbagliata-${i}`)).status, 401);
-  assert.equal((await loginAs(room, "bersaglio@esempio.it", "dicembre-2026")).status, 429);
-  assert.equal((await loginAs(room, "altra@esempio.it", "dicembre-2026")).status, 200);
+  for (let i = 0; i < 10; i++) assert.equal((await loginAs(room, "Bersaglio", `sbagliata-${i}`)).status, 401);
+  assert.equal((await loginAs(room, "Bersaglio", "dicembre-2026")).status, 429);
+  assert.equal((await loginAs(room, "  BERSAGLIO ", "dicembre-2026")).status, 429, "maiuscole e spazi non aggirano il limite");
+  assert.equal((await loginAs(room, "Altra", "dicembre-2026")).status, 200);
 });
 
 test("board senza accesso configurato: sempre 401, mai 429 (nessun contatore da riempire)", async () => {
-  for (let i = 0; i < 15; i++) assert.equal((await loginAs("mai-configurata", `x${i}@esempio.it`, "qualsiasi-123")).status, 401);
+  for (let i = 0; i < 15; i++) assert.equal((await loginAs("mai-configurata", `X${i}`, "qualsiasi-123")).status, 401);
 });
 
 test("mentre arrivano molti login il server resta reattivo (la verifica non blocca il ciclo degli eventi)", async () => {
   const room = "carico1";
   await setAccess(room, { password: "dicembre-2026" });
-  const flood = Array.from({ length: 12 }, (_, i) => loginAs(room, `carico${i}@esempio.it`, "sbagliata-123"));
+  const flood = Array.from({ length: 12 }, (_, i) => loginAs(room, `Carico${i}`, "sbagliata-123"));
   let worst = 0;
   for (let i = 0; i < 6; i++) {
     const t0 = Date.now();
