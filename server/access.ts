@@ -1,5 +1,7 @@
 // Accesso degli allievi con la password della sessione: impronta della password, dati per board, limite di tentativi.
-// La password non si conserva mai in chiaro; la mail dichiarata identifica la persona ma non la autentica.
+// Per il login conta solo l'impronta. La password della sessione si conserva anche leggibile (campo `password`, file 0600) perché il
+// trainer deve poterla rivedere e comunicare agli allievi; la rilegge solo l'editor della board (GET /auth/access).
+// La mail dichiarata identifica la persona ma non la autentica.
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,6 +11,7 @@ import { normalizeEmail, ROOM_ID } from "./auth.ts";
 export interface RoomAccess {
   passwordHash: string; // "scrypt$<sale>$<impronta>"
   until: number | null; // fine della sessione, ms epoch; null = nessuna fine
+  password?: string; // la password in chiaro, per mostrarla al trainer; assente nelle board create prima di questa funzione
 }
 
 const KEYLEN = 32;
@@ -45,7 +48,7 @@ export function readAccess(dir: string): RoomAccess | null {
     const j = JSON.parse(fs.readFileSync(path.join(dir, FILE), "utf8"));
     if (typeof j?.passwordHash !== "string" || !j.passwordHash.startsWith("scrypt$")) return null;
     if (j.until !== null && !(typeof j.until === "number" && Number.isFinite(j.until))) return null;
-    return { passwordHash: j.passwordHash, until: j.until };
+    return typeof j.password === "string" ? { passwordHash: j.passwordHash, until: j.until, password: j.password } : { passwordHash: j.passwordHash, until: j.until };
   } catch {
     return null;
   }

@@ -2,12 +2,13 @@
 // verifica di un token. Tutte rispondono JSON; il token viaggia solo nell'intestazione Authorization, mai nell'indirizzo.
 //   POST /auth/login                      { room, nome, cognome, email, password, ricordami? } -> { ok, token, name, exp }
 //   PUT  /auth/access?room=<board>        (editor della board) { password?, until? }            -> { ok, until }
+//   GET  /auth/access?room=<board>        (editor della board)                                  -> { ok, configured, password|null, until|null }
 //   GET  /auth/check?room=<board>         Authorization: Bearer <token>                         -> { ok, name, role, exp }
 import type http from "node:http";
 import { readParent } from "./course-data.ts";
 import path from "node:path";
 import { inspectToken, personalUid, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
-import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess } from "./access.ts";
+import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess, type RoomAccess } from "./access.ts";
 
 export interface AuthOptions {
   secret: string;
@@ -131,8 +132,20 @@ export function createAuthHandler(opts: AuthOptions) {
     const existing = readAccess(roomDir(room));
     if (!existing && b.password === undefined) return fail(res, 400, "Per questa board serve prima la password.");
     const until = b.until !== undefined ? (b.until as number | null) : (existing?.until ?? null);
-    writeAccess(roomDir(room), { passwordHash: b.password !== undefined ? hashPassword(b.password as string) : existing!.passwordHash, until });
+    const plain = b.password !== undefined ? (b.password as string) : existing?.password; // cambiando solo la data resta la password già salvata
+    const next: RoomAccess = { passwordHash: b.password !== undefined ? hashPassword(b.password as string) : existing!.passwordHash, until };
+    if (plain !== undefined) next.password = plain;
+    writeAccess(roomDir(room), next);
     json(res, 200, { ok: true, until });
+  }
+
+  /** Password e fine della sessione correnti, per il pannello "Invita": solo l'editor della board. */
+  function getAccess(req: http.IncomingMessage, res: http.ServerResponse, room: string) {
+    const check = ROOM_ID.test(room) ? inspectToken(bearer(req), room, opts.secret) : ({ ok: false, motivo: "non valido" } as const);
+    if (!check.ok) return fail(res, 401, check.motivo);
+    if (check.payload.role !== "editor") return fail(res, 403, "Solo il trainer può vedere la password.");
+    const a = readAccess(roomDir(room));
+    json(res, 200, { ok: true, configured: !!a, password: a?.password ?? null, until: a?.until ?? null });
   }
 
   /** L'aula di una stanza (pubblico: il nome dell'aula è già nel nome della stanza): serve a riportare allo giusto login chi arriva a una stanza senza accesso. */
@@ -155,7 +168,7 @@ export function createAuthHandler(opts: AuthOptions) {
       case "/auth/login":
         return req.method === "POST" ? login(req, res) : fail(res, 405, "Metodo non consentito.");
       case "/auth/access":
-        return req.method === "PUT" ? setAccess(req, res, room) : fail(res, 405, "Metodo non consentito.");
+        return req.method === "PUT" ? setAccess(req, res, room) : req.method === "GET" ? getAccess(req, res, room) : fail(res, 405, "Metodo non consentito.");
       case "/auth/config":
         return req.method === "GET" ? json(res, 200, { trainerLoginUrl: opts.trainerLoginUrl ?? null }) : fail(res, 405, "Metodo non consentito.");
       case "/auth/aula":

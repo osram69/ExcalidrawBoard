@@ -1,0 +1,30 @@
+// Password di sessione casuale per gli allievi: 8 caratteri, facili da dettare (niente I l O 0 1), con maiuscole,
+// minuscole, cifre e qualche simbolo. 8 è anche il minimo accettato dal server.
+const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+const LOWER = "abcdefghijkmnpqrstuvwxyz";
+const DIGITS = "23456789";
+const SYMBOLS = "!@#$%&*?";
+const ALL = UPPER + LOWER + DIGITS + SYMBOLS;
+
+export type RandomInt = (max: number) => number;
+
+/** Intero casuale in [0, max) da crypto.getRandomValues, senza distorsione (scarta i valori oltre l'ultimo multiplo di max). */
+export const cryptoInt: RandomInt = (max) => {
+  const limit = Math.floor(0x1_0000_0000 / max) * max;
+  const buf = new Uint32Array(1);
+  do crypto.getRandomValues(buf);
+  while (buf[0] >= limit);
+  return buf[0] % max;
+};
+
+export function generatePassword(length = 8, rnd: RandomInt = cryptoInt): string {
+  const pick = (set: string) => set[rnd(set.length)];
+  // una per categoria, poi il resto a caso, poi si mescola
+  const chars = [pick(UPPER), pick(LOWER), pick(DIGITS), pick(SYMBOLS)];
+  while (chars.length < length) chars.push(pick(ALL));
+  for (let i = chars.length - 1; i > 0; i--) {
+    const j = rnd(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
+}

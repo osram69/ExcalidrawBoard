@@ -41,17 +41,36 @@ test("/auth/access: solo il trainer (editor) della stessa board imposta la passw
   assert.equal((await setAccess(room, {})).status, 400);
   assert.equal((await setAccess(room, { until: "domani" })).status, 400);
   assert.equal((await setAccess("nuova-senza-password", { until: Date.now() + 1000 })).status, 400, "senza password esistente serve la password");
-  assert.equal((await fetch(`${srv.url}/auth/access?room=${room}`)).status, 405);
+  assert.equal((await fetch(`${srv.url}/auth/access?room=${room}`, { method: "DELETE" })).status, 405);
   assert.equal((await setAccess(room, { password: "a".repeat(10_000) })).status, 413);
 });
 
-test("/auth/access: la password non è in chiaro su disco e aggiornare solo la data la conserva", async () => {
+test("/auth/access: la password resta salvata (anche in chiaro, per rivederla) e aggiornare solo la data la conserva", async () => {
   const room = "acc2";
   assert.equal((await setAccess(room, { password: "dicembre-2026", until: null })).status, 200);
   const file = path.join(srv.dataDir, "rooms", room, "access.json");
-  assert.ok(!fs.readFileSync(file, "utf8").includes("dicembre-2026"));
+  const onDisk = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(onDisk.password, "dicembre-2026");
+  assert.ok(String(onDisk.passwordHash).startsWith("scrypt$"), "il login usa comunque l'impronta");
   assert.equal((await setAccess(room, { until: Date.now() + 3600e3 })).status, 200);
   assert.equal((await login(room)).status, 200, "la password deve restare valida");
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).password, "dicembre-2026", "cambiando solo la data la password resta");
+});
+
+test("GET /auth/access: solo il trainer rilegge password e fine sessione", async () => {
+  const room = "acc3";
+  const get = (token?: string) => fetch(`${srv.url}/auth/access?room=${room}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+  const empty: any = await (await get(tok(room))).json();
+  assert.deepEqual([empty.configured, empty.password, empty.until], [false, null, null]);
+  const until = Date.now() + 3600e3;
+  await setAccess(room, { password: "dicembre-2026", until });
+  const j: any = await (await get(tok(room))).json();
+  assert.deepEqual([j.ok, j.configured, j.password, j.until], [true, true, "dicembre-2026", until]);
+  assert.equal((await get()).status, 401);
+  assert.equal((await get(tok(room, "participant"))).status, 403);
+  assert.equal((await get(tok(room, "viewer"))).status, 403);
+  assert.equal((await get(tok("altra"))).status, 401);
+  assert.equal((await get(tok(room))).headers.get("cache-control"), "no-store");
 });
 
 test("/auth/login: token personale con nome, mail e uid derivato", async () => {
