@@ -122,37 +122,39 @@ export function Invite({ room, token, onClose }: Props) {
         <p className="side-note">Vale per questa aula. Resta salvata: la ritrovi qui ogni volta che apri il pannello.</p>
         <label className="side-col">
           Password (da 8 a 200 caratteri)
-          <div className="side-row">
-            <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={200} autoComplete="off" placeholder="la stessa che comunichi agli iscritti" />
-            <button className="side-btn" disabled={busy || !password} onClick={() => copy(password, "Password copiata.")} title="Copia la password">
-              Copia
-            </button>
-          </div>
-        </label>
-        {legacy && <p className="side-note">Per questa aula c'è già una password, ma è stata impostata prima che il pannello la conservasse e non si può rileggere. Scrivine una nuova o premi Genera.</p>}
-        <label className="side-col">
-          Ultimo giorno della sessione (facoltativo)
-          <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+          <input type="text" value={password} onChange={(e) => setPassword(e.target.value)} minLength={8} maxLength={200} autoComplete="off" placeholder="la stessa che comunichi agli iscritti" />
         </label>
         <div className="side-actions">
-          <button className="side-btn primary" disabled={busy || !saved} onClick={submit}>
+          <button className="side-btn primary" disabled={busy || !saved} onClick={submit} title="Salva password e ultimo giorno per questa aula">
             Salva
           </button>
           <button className="side-btn" disabled={busy || !saved} onClick={generate} title="Compila il campo con una password casuale di 8 caratteri (poi premi Salva)">
             Genera
           </button>
-          <button
-            className="side-btn"
-            disabled={busy || !saved || !until}
-            onClick={() => {
-              setUntil("");
-              void save({ until: null }, "Data di fine tolta.", { password: saved?.password ?? "", until: "" });
-            }}
-            title="Toglie la data di fine, senza cambiare la password"
-          >
-            Togli la data di fine
+          <button className="side-btn" disabled={busy || !password} onClick={() => copy(password, "Password copiata.")} title="Copia la password">
+            Copia
           </button>
         </div>
+        {legacy && <p className="side-note">Per questa aula c'è già una password, ma è stata impostata prima che il pannello la conservasse e non si può rileggere. Scrivine una nuova o premi Genera.</p>}
+        <label className="side-col">
+          Ultimo giorno della sessione (facoltativo)
+          <div className="side-row">
+            <input type="date" value={until} onChange={(e) => setUntil(e.target.value)} />
+            <button
+              type="button"
+              className="side-btn"
+              disabled={busy || !saved || !until}
+              onClick={() => {
+                setUntil("");
+                void save({ until: null }, "Data di fine tolta.", { password: saved?.password ?? "", until: "" });
+              }}
+              title="Toglie la data di fine, senza cambiare la password"
+            >
+              Togli data
+            </button>
+          </div>
+        </label>
+        <p className="side-note">La data si salva insieme alla password con il pulsante «Salva».</p>
         <div className="side-actions">
           <button
             className="side-btn"

@@ -102,7 +102,7 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 .side-col { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
 .side-panel input, .side-panel select { font: inherit; padding: 5px 8px; border: 1px solid #ccc; border-radius: 7px; }
 .side-row input[type="number"] { width: 64px; }
-.side-row input[readonly] { flex: 1; min-width: 0; }
+.side-row input[readonly], .side-row input[type="date"] { flex: 1; min-width: 0; }
 .side-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .side-btn { padding: 6px 12px; border: 1px solid #ccc; border-radius: 8px; background: #fff; font: inherit; cursor: pointer; }
 .side-btn:hover:not(:disabled) { border-color: var(--flame); color: var(--flame); }
