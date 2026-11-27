@@ -121,14 +121,18 @@ function BoardPage({ room }: { room: string }) {
       onExpired={onExpired}
       onGoto={onGoto}
       onBackToAula={onBackToAula}
-      onLogout={
-        isLoginSession(state.session)
-          ? () => {
-              dropSession(room, true);
-              setState({ kind: "login" });
-            }
-          : undefined
-      }
+      onLogout={() => {
+        const viaLogin = isLoginSession(state.session);
+        dropSession(room, true);
+        if (viaLogin) {
+          setState({ kind: "login" });
+          return;
+        }
+        // trainer entrato dal link firmato: non c'è un login a cui tornare. Si chiude la scheda (riesce se l'ha aperta il backend),
+        // altrimenti si va alla pagina iniziale. Il token è già stato tolto: ricaricando la board non si rientra senza un nuovo link.
+        window.close();
+        setTimeout(() => location.assign("/"), 200);
+      }}
     />
   );
 }
