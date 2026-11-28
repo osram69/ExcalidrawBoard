@@ -112,6 +112,15 @@ c'è il pulsante **"Accedi come trainer"**. Porta al login di `/materiali` sul s
 - Qualsiasi trainer apre qualsiasi board e ne crea di nuove dandole un nome. Il token lo emette il sito e dura 12 ore (impostabile sul sito, da 1 a 72).
 - La parte del sito (rotta `/materiali/board`, `BOARD_SECRET`, `BOARD_URL`) e il formato del token sono descritti in [docs/accesso-cube-academy.md](docs/accesso-cube-academy.md).
 
+## Aule gestite dal backend del sito
+
+Dal menu **Aule** del backend (administrator e superuser) si vedono le aule presenti in `data/rooms/`, si creano con la password di sessione, si **attivano o disattivano** e si **eliminano**. I trainer vedono l'elenco (senza password) nel pannello "Accedi alla board" e scelgono l'aula in cui entrare.
+
+- Il sito chiama `GET|POST|PATCH|DELETE /auth/aule` con una firma HMAC (`BOARD_SECRET`) legata a metodo e indirizzo, valida un minuto. Il token di una board non vale per queste rotte.
+- **Disattivare** imposta la fine della sessione a "adesso": nessuno entra più con la password e gli allievi collegati vengono scollegati; i trainer entrano comunque. **Attivare** toglie la fine.
+- **Eliminare** cancella l'aula e tutte le sue stanze di lavoro (disegni, immagini, voti) e scollega chi è dentro. Non si può annullare.
+- Le board non si cancellano mai da sole: restano finché non le elimini da qui (o con `rm -r data/rooms/<nome>`).
+
 ## Aula e stanze dal vivo (come le stanze di Zoom o di Miro)
 
 Tutti entrano nella **board del trainer (l'aula)**; poi il trainer crea le stanze e gli allievi vengono portati dentro da soli. Non servono link nuovi né password in più.

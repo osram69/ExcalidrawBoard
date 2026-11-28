@@ -124,6 +124,13 @@ export class RoomVotes {
     this.timer.unref();
   }
 
+  /** Scarta ciò che non è ancora scritto (la board sta per essere eliminata: un salvataggio in ritardo ricreerebbe la cartella). */
+  cancel() {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
+    this.dirty = false;
+  }
+
   /** Scrive subito, se c'è qualcosa da scrivere (chiamato anche alla chiusura della stanza e allo spegnimento del server). */
   flush() {
     if (this.timer) clearTimeout(this.timer);

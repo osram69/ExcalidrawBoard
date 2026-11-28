@@ -61,6 +61,7 @@ export class Room {
   private saveTimer: NodeJS.Timeout | null = null;
   private dirtyFiles = new Set<string>();
   private idle: NodeJS.Timeout | null = null;
+  private disposed = false;
 
   constructor(readonly id: string, private dir: string, private onEmpty: () => void) {
     // votabili: solo note adesive esistenti (customData.kind === "nota"), non cancellate
@@ -133,6 +134,7 @@ export class Room {
   }
 
   flush() {
+    if (this.disposed) return; // eliminata: i collegamenti che si chiudono non devono riscrivere la cartella
     this.votes.flush();
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = null;
@@ -150,6 +152,7 @@ export class Room {
 
   /** Come `flush`, ma senza bloccare il server e segnalando i fallimenti (serve a chi crea molte board insieme). */
   async flushAsync(): Promise<void> {
+    if (this.disposed) return;
     if (this.saveTimer) clearTimeout(this.saveTimer);
     this.saveTimer = null;
     this.votes.flush();
@@ -169,6 +172,18 @@ export class Room {
     if (this.idle) clearTimeout(this.idle);
     this.idle = setTimeout(() => !this.peers.size && this.onEmpty(), ms);
     this.idle.unref();
+  }
+
+  /** La board viene eliminata: niente più salvataggi e collegamenti chiusi (codice 4003). */
+  dispose() {
+    this.disposed = true;
+    if (this.saveTimer) clearTimeout(this.saveTimer);
+    if (this.idle) clearTimeout(this.idle);
+    this.saveTimer = this.idle = null;
+    this.dirtyFiles.clear();
+    this.votes.cancel();
+    for (const p of [...this.peers]) p.ws.close(4003, "eliminata");
+    this.peers.clear();
   }
 
   broadcast(msg: unknown, except?: Peer) {
@@ -204,6 +219,13 @@ export function getRoom(dataDir: string, id: string): Room {
 /** La board se è in memoria (cioè se c'è qualcuno collegato o l'ultimo se n'è andato da poco). */
 export const loadedRoom = (id: string): Room | undefined => rooms.get(id);
 export const openRooms = () => rooms.size;
+/** Toglie la board dalla memoria senza salvarla (prima di cancellarne la cartella). */
+export function dropRoom(id: string) {
+  const r = rooms.get(id);
+  if (!r) return;
+  r.dispose();
+  rooms.delete(id);
+}
 export function closeAllRooms() {
   for (const r of rooms.values()) r.flush();
 }

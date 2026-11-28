@@ -127,6 +127,11 @@ export class Course {
 
 const courses = new Map<string, Course>();
 
+/** Dimentica il corso in memoria (l'aula è stata eliminata). */
+export function dropCourse(dataDir: string, aula: string): void {
+  courses.delete(`${dataDir}|${aula}`);
+}
+
 /** Il corso della board: quello dell'aula se è una stanza (`parent.json`), altrimenti il corso della board stessa. */
 export function getCourse(dataDir: string, secret: string, boardId: string): Course {
   const aula = readParent(roomDir(dataDir, boardId))?.aula ?? boardId;

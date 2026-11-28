@@ -3,11 +3,13 @@
 //   POST /auth/login                      { room, nome, cognome, password, ricordami? } -> { ok, token, name, exp }
 //   PUT  /auth/access?room=<board>        (editor della board) { password?, until? }            -> { ok, until }
 //   GET  /auth/access?room=<board>        (editor della board)                                  -> { ok, configured, password|null, until|null }
+//   GET|POST|PATCH|DELETE /auth/aule[?room=<aula>]   (solo backend del sito, firma HMAC)   elenco, crea, attiva/disattiva/password, elimina
 //   GET  /auth/check?room=<board>         Authorization: Bearer <token>                         -> { ok, name, role, exp }
 import type http from "node:http";
 import { readParent } from "./course-data.ts";
 import path from "node:path";
-import { inspectToken, personalUid, personKey, ROOM_ID, signToken, type TokenPayload } from "./auth.ts";
+import { inspectToken, personalUid, personKey, ROOM_ID, signToken, verifyAdminCall, type TokenPayload } from "./auth.ts";
+import { createAula, deleteAula, listAule, updateAula, type Result } from "./aule.ts";
 import { AttemptLimiter, ConcurrencyGate, hashPassword, normalizeIp, parseLoginBody, passwordOk, readAccess, sessionExp, verifyPassword, writeAccess, type RoomAccess } from "./access.ts";
 
 export interface AuthOptions {
@@ -163,9 +165,24 @@ export function createAuthHandler(opts: AuthOptions) {
     json(res, 200, { ok: true, name: c.payload.name, role: c.payload.role, exp: c.payload.exp });
   }
 
+  /** Gestione delle aule: solo il backend del sito, con una firma legata a metodo e indirizzo (BOARD_SECRET). */
+  async function aule(req: http.IncomingMessage, res: http.ServerResponse, url: URL, room: string) {
+    const method = req.method ?? "";
+    if (!verifyAdminCall(req.headers.authorization, opts.secret, method, url.pathname + url.search)) return fail(res, 401, "Firma non valida o scaduta.");
+    const send = (r: Result<object>) => (r.ok ? json(res, 200, r) : fail(res, r.status, r.motivo));
+    if (method === "GET") return json(res, 200, { ok: true, aule: listAule(opts.dataDir) });
+    if (method === "DELETE") return send(deleteAula(opts.dataDir, room));
+    if (method !== "POST" && method !== "PATCH") return fail(res, 405, "Metodo non consentito.");
+    const raw = await body(req, res);
+    if (raw === undefined) return;
+    send(method === "POST" ? createAula(opts.dataDir, raw) : updateAula(opts.dataDir, opts.secret, room, raw));
+  }
+
   return async function handle(req: http.IncomingMessage, res: http.ServerResponse, url: URL): Promise<void> {
     const room = url.searchParams.get("room") ?? "";
     switch (url.pathname) {
+      case "/auth/aule":
+        return aule(req, res, url, room);
       case "/auth/login":
         return req.method === "POST" ? login(req, res) : fail(res, 405, "Metodo non consentito.");
       case "/auth/access":

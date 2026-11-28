@@ -57,6 +57,23 @@ export function inspectToken(token: string | null | undefined, room: string, sec
   return { ok: true, payload: p };
 }
 
+const ADMIN_WINDOW_MS = 60_000;
+const adminMac = (secret: string, ts: string, method: string, target: string) =>
+  crypto.createHmac("sha256", secret).update(`boardadmin:${ts}:${method}:${target}`).digest("base64url");
+
+/** Intestazione con cui il sito (backend) chiama la gestione delle aule: firma di istante, metodo e indirizzo, valida un minuto. */
+export function signAdminCall(secret: string, method: string, target: string, now = Date.now()): string {
+  const ts = String(now);
+  return `${ts}.${adminMac(secret, ts, method.toUpperCase(), target)}`;
+}
+
+export function verifyAdminCall(header: string | undefined, secret: string, method: string, target: string, now = Date.now()): boolean {
+  const [ts, sig, extra] = String(header ?? "").replace(/^Bearer /, "").split(".");
+  if (!ts || !sig || extra !== undefined || !/^\d{10,15}$/.test(ts) || Math.abs(now - Number(ts)) > ADMIN_WINDOW_MS) return false;
+  const good = adminMac(secret, ts, method.toUpperCase(), target);
+  return sig.length === good.length && crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(good));
+}
+
 /** Indirizzo http(s) completo (per esempio il login del trainer sul sito, `TRAINER_LOGIN_URL`); altrimenti `null`. */
 export function parseHttpUrl(raw: string | undefined): string | null {
   const v = (raw ?? "").trim();
