@@ -86,6 +86,23 @@ html, body, #root { margin: 0; height: 100%; font-family: system-ui, -apple-syst
 
 /* pannelli del trainer: stanze e invito */
 .chip-room { background: rgba(255, 106, 69, 0.4); }
+
+/* Telefono: stato e pulsante a tre righe accanto al marchio; Stanze, Invita, Esci e le etichette nel menu a tendina */
+.board-burger-wrap { display: none; align-items: center; gap: 10px; }
+.board-dot { width: 10px; height: 10px; border-radius: 50%; }
+.board-dot.chip-ok { background: #2fb36d; }
+.board-dot.chip-bad { background: #e8321e; }
+.board-dot.chip-wait { background: #d9a21b; }
+.board-burger { width: 36px; height: 34px; border: 0; border-radius: 9px; background: rgba(255, 255, 255, 0.14); color: #fff; font-size: 18px; line-height: 1; cursor: pointer; }
+.board-burger:hover { background: rgba(255, 255, 255, 0.25); }
+@media (max-width: 760px) {
+  .board-bar { padding: 6px 10px; }
+  .board-brand { flex: 1; }
+  .board-burger-wrap { display: inline-flex; }
+  .board-meta { display: none; width: 100%; flex-direction: column; align-items: flex-start; gap: 8px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.15); }
+  .board-meta.open { display: flex; }
+  .board-meta .chip-btn { font-size: 14px; padding: 7px 14px; }
+}
 .side-panel { position: absolute; top: 8px; right: 8px; bottom: 8px; width: 340px; max-width: calc(100% - 16px); z-index: 7; display: flex; flex-direction: column; gap: 12px; padding: 14px; overflow: auto; background: #fff; border-radius: 14px; box-shadow: 0 6px 30px rgba(19, 17, 23, 0.25); font-size: 14px; }
 .side-head { display: flex; align-items: center; justify-content: space-between; }
 .side-head h2 { margin: 0; font-size: 17px; }

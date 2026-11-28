@@ -45,6 +45,7 @@ export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: Bo
   const [myVotes, setMyVotes] = useState<MyVotes>({ mine: {}, left: 0 });
   const [voteView, setVoteView] = useState<{ view: ViewInfo; notes: NoteBox[] }>({ view: { scrollX: 0, scrollY: 0, zoom: 1 }, notes: [] });
   const [budgetDraft, setBudgetDraft] = useState(5);
+  const [menu, setMenu] = useState(false); // sul telefono Stanze, Invita, Esci e le etichette stanno dietro il pulsante a tre righe
   const [tplOpen, setTplOpen] = useState(false);
   const [presence, setPresence] = useState<PresenceInfo | null>(null); // chi è collegato nel corso (solo per il trainer)
   const [where, setWhere] = useState<{ aula: string; round: number | null; n: number | null } | null>(null);
@@ -351,11 +352,28 @@ export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: Bo
           </b>
           <span className="board-room">{session.room}</span>
         </div>
+        <div className="board-burger-wrap">
+          <span
+            className={`board-dot ${status === "online" ? "chip-ok" : status === "offline" ? "chip-bad" : "chip-wait"}`}
+            role="img"
+            aria-label={status === "online" ? "in linea" : status === "offline" ? "offline" : "connessione in corso"}
+          />
+          <button
+            type="button"
+            className="board-burger"
+            aria-label={menu ? "Chiudi il menu" : "Apri il menu"}
+            aria-expanded={menu}
+            aria-controls="board-menu"
+            onClick={() => setMenu((v) => !v)}
+          >
+            {menu ? "✕" : "☰"}
+          </button>
+        </div>
         <div className="board-gadgets">
           <TimerPill state={timer.state} offsetMs={timer.offsetMs} canControl={session.role === "editor"} send={send} />
           <VotePanel votes={votes} myVotes={myVotes} isEditor={session.role === "editor"} canVote={!readonly} send={send} budgetDraft={budgetDraft} setBudgetDraft={setBudgetDraft} />
         </div>
-        <div className="board-meta">
+        <div id="board-menu" className={`board-meta${menu ? " open" : ""}`}>
           <span className={`chip ${status === "online" ? "chip-ok" : status === "offline" ? "chip-bad" : "chip-wait"}`}>
             {status === "online" ? "in linea" : status === "offline" ? "offline" : "connessione…"}
           </span>
@@ -364,18 +382,18 @@ export function Board({ session, onExpired, onLogout, onGoto, onBackToAula }: Bo
           {where && <span className="chip chip-room">{where.n !== null ? `Stanza ${where.n}` : "Aula"}</span>}
           {session.role === "editor" && (
             <>
-              <button className="chip chip-btn" onClick={() => setPanel(panel === "stanze" ? null : "stanze")}>
+              <button className="chip chip-btn" onClick={() => { setPanel(panel === "stanze" ? null : "stanze"); setMenu(false); }}>
                 Stanze
               </button>
               {where && where.n === null && (
-                <button className="chip chip-btn" onClick={() => setPanel(panel === "invita" ? null : "invita")}>
+                <button className="chip chip-btn" onClick={() => { setPanel(panel === "invita" ? null : "invita"); setMenu(false); }}>
                   Invita
                 </button>
               )}
             </>
           )}
           {onLogout && (
-            <button className="chip chip-btn" onClick={onLogout} title="Esci e cancella i dati ricordati su questo dispositivo">
+            <button className="chip chip-btn" onClick={() => { setMenu(false); onLogout(); }} title="Esci e cancella i dati ricordati su questo dispositivo">
               Esci
             </button>
           )}
